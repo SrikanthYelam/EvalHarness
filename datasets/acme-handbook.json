@@ -1,0 +1,102 @@
+{
+  "name": "acme-handbook",
+  "description": "Questions answerable from DocRAG's samples/acme-handbook.md. Ingest that file into the RAG API before running.",
+  "testCases": [
+    {
+      "id": "vacation-carryover",
+      "category": "time-off",
+      "difficulty": "easy",
+      "question": "How many unused vacation days can I carry over into the next year?",
+      "expectedAnswer": "Up to 5 unused vacation days carry over into the next calendar year; anything above that expires on January 31.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "carry over into the next calendar year" }]
+    },
+    {
+      "id": "vacation-accrual",
+      "category": "time-off",
+      "difficulty": "easy",
+      "question": "How many vacation days do full-time employees get per year?",
+      "expectedAnswer": "Full-time employees accrue 1.5 vacation days per month, which is 18 days per year.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "1.5 vacation days per month" }]
+    },
+    {
+      "id": "vacation-expiry",
+      "category": "time-off",
+      "difficulty": "medium",
+      "question": "When do vacation days above the carryover limit expire?",
+      "expectedAnswer": "Days above the carryover limit of 5 expire on January 31.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "expires on January 31" }]
+    },
+    {
+      "id": "vacation-accrued-six-months",
+      "category": "time-off",
+      "difficulty": "hard",
+      "question": "I have worked full-time for six months. How many vacation days have I accrued?",
+      "expectedAnswer": "9 days, because full-time employees accrue 1.5 vacation days per month (1.5 x 6).",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "1.5 vacation days per month" }]
+    },
+    {
+      "id": "sick-days",
+      "category": "time-off",
+      "difficulty": "easy",
+      "question": "How many paid sick days do employees get each year?",
+      "expectedAnswer": "Employees receive 10 paid sick days per year.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "10 paid sick days" }]
+    },
+    {
+      "id": "sick-note",
+      "category": "time-off",
+      "difficulty": "medium",
+      "question": "When do I need a doctor's note for sick leave?",
+      "expectedAnswer": "A doctor's note is required for absences longer than three consecutive days.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "doctor's note" }]
+    },
+    {
+      "id": "remote-days",
+      "category": "remote-work",
+      "difficulty": "easy",
+      "question": "How many days per week can I work remotely?",
+      "expectedAnswer": "Up to three days per week, with manager approval.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "up to three days per week" }]
+    },
+    {
+      "id": "remote-internet",
+      "category": "remote-work",
+      "difficulty": "easy",
+      "question": "How much does the company reimburse for home internet?",
+      "expectedAnswer": "Up to $50 per month.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "$50 per month" }]
+    },
+    {
+      "id": "remote-equipment",
+      "category": "remote-work",
+      "difficulty": "medium",
+      "question": "How do I get a monitor for working from home, and what is the budget?",
+      "expectedAnswer": "Request equipment such as monitors through the IT portal; there is a one-time budget of $400.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "IT portal" }]
+    },
+    {
+      "id": "expense-deadline",
+      "category": "expenses",
+      "difficulty": "easy",
+      "question": "How long do I have to submit an expense report?",
+      "expectedAnswer": "Within 30 days of purchase, using the finance portal.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "within 30 days of purchase" }]
+    },
+    {
+      "id": "expense-receipt-threshold",
+      "category": "expenses",
+      "difficulty": "medium",
+      "question": "Do I need a receipt for a $40 expense?",
+      "expectedAnswer": "Yes. Receipts are required for any expense over $25.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "over $25" }]
+    },
+    {
+      "id": "expense-flight-class",
+      "category": "expenses",
+      "difficulty": "medium",
+      "question": "What class must I book for a four-hour flight?",
+      "expectedAnswer": "Economy class, which is required for flights under six hours, booked through the approved travel agency.",
+      "expectedSources": [{ "documentName": "acme-handbook.md", "chunkContains": "economy class" }]
+    }
+  ]
+}

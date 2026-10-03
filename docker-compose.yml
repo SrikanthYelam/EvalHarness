@@ -1,0 +1,62 @@
+# Full local environment: the DocRAG API (built from a sibling checkout), a one-shot job that loads the sample
+# corpus into it, and EvalHarness, which waits for the API, runs the evaluation and exits with the quality-gate
+# result. Run it with:
+#
+#   docker compose run --rm --build evalharness; echo "exit code: $?"; docker compose down
+#
+# (scripts/run-local.sh and scripts/run-local.ps1 do exactly that.) Secrets come from your shell or a git-ignored
+# .env file (see .env.example); nothing secret is stored in this file.
+name: evalharness
+
+services:
+  docrag:
+    build:
+      context: ${DOCRAG_CONTEXT:-../DocRAG}
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in your environment or a .env file}
+    volumes:
+      - docrag-data:/data
+    # Not published to the host: EvalHarness reaches it over the compose network at http://docrag:8080.
+    # To poke at it from the host, add:  ports: ["8080:8080"]
+
+  # One-shot: uploads everything in ./corpus to the RAG API so the dataset's questions are answerable.
+  # This is environment setup for the demo; EvalHarness itself never ingests documents.
+  seed:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      - docrag
+    volumes:
+      - ./corpus:/corpus:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        for f in /corpus/*; do
+          echo "Ingesting $$f"
+          curl -fsS --retry 30 --retry-delay 2 --retry-connrefused --retry-all-errors \
+            -F "file=@$$f" http://docrag:8080/documents
+          echo
+        done
+
+  evalharness:
+    build: .
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in your environment or a .env file}
+      EVALHARNESS_RagApi__BaseUrl: http://docrag:8080
+      EVALHARNESS_RagApi__WaitForReadySeconds: "120"
+      # Optional: path (inside the container) of a baseline report to compare against, e.g. /baselines/acme.json
+      EVALHARNESS_Baseline: ${EVAL_BASELINE:-}
+    # Root by default so the bind-mounted ./reports is writable on every platform. On Linux, set
+    # EVAL_UID=$(id -u) EVAL_GID=$(id -g) so the reports are owned by you.
+    user: "${EVAL_UID:-0}:${EVAL_GID:-0}"
+    volumes:
+      - ./datasets:/datasets:ro
+      - ./baselines:/baselines:ro
+      - ./reports:/reports
+    command: ["run", "--dataset", "/datasets/${EVAL_DATASET:-acme-handbook.json}", "--output", "/reports"]
+
+volumes:
+  docrag-data:

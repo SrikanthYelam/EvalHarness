@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\EvalHarness.Core\EvalHarness.Core.csproj" />
+    <ProjectReference Include="..\EvalHarness.Runner\EvalHarness.Runner.csproj" />
+  </ItemGroup>
+
+</Project>
