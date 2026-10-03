@@ -13,7 +13,7 @@ Evaluation dataset ──► Eval runner ──► RAG API (system under test) �
                                                                        retrieval
 ```
 
-The sample configuration targets the [DocRAG](../DocRAG) API in this workspace, but any API that takes a question and returns an answer plus retrieved chunks works, see [Pointing it at a different API](#pointing-it-at-a-different-api).
+EvalHarness works with any API that takes a question and returns an answer plus retrieved chunks. The default settings expect the response shape shown under [Pointing it at a different API](#pointing-it-at-a-different-api); other shapes are a configuration change.
 
 ## Contents
 
@@ -58,7 +58,7 @@ Prerequisites: .NET 8 SDK for local runs, and/or Docker. The judge and embedding
 dotnet run --project src/EvalHarness.Cli -- validate --dataset datasets/acme-handbook.json
 
 # 2. Start your RAG API and ingest the documents the dataset asks about
-#    (for DocRAG: upload ../DocRAG/samples/acme-handbook.md to POST /documents).
+#    (samples/acme-handbook.md for the sample dataset).
 
 # 3. Run the evaluation
 export OPENAI_API_KEY=sk-...
@@ -216,7 +216,7 @@ A gate on a metric whose evaluator was not enabled for the run (for example with
 
 ```bash
 # Save a known-good run as the baseline
-cp reports/latest.json baselines/acme-handbook.json
+mkdir -p baselines && cp reports/latest.json baselines/acme-handbook.json
 
 # Later: run again and compare in one step...
 dotnet run --project src/EvalHarness.Cli -- run --dataset datasets/acme-handbook.json --baseline baselines/acme-handbook.json
@@ -316,45 +316,31 @@ The API's shape is described entirely in `RagApi` configuration; no evaluator kn
 
 Paths are dot-separated property names (case-insensitive). `RequestFields` values that look like numbers or booleans are sent as such. If the response shape needs more than field mapping (for example a streaming API), implement `IRagClient` and register it.
 
-DocRAG notes: the defaults map its `/ask` response, using `retrievedChunks` (ranked, with scores) as the retrieved context. An `InsufficientContext` response has a `null` answer; it is scored as "no answer" (the correctness judge fails it, faithfulness treats it as vacuously faithful). `/openapi/v1.json` is used as the readiness probe.
+Default mapping: the request is `{"question": ...}`; the response is expected to contain `answer`, optional `status`, and a ranked `retrievedChunks` array whose items have `id`, `sourceFile`, `text` and `score`. These are the retrieved context. A `null` answer is scored as "no answer" (the correctness judge fails it, faithfulness treats it as vacuously faithful). `/openapi/v1.json` is the default readiness probe; change `ReadinessPath` for your API.
 
 ## Docker
 
-The Dockerfile is multi-stage (restore, build, optional `test`, publish, then a slim runtime image that defaults to a non-root user). There are two Compose modes. Datasets are mounted **read-only**; `./reports` is a bind mount, so reports survive the container. The Compose files run the container as root unless you set `EVAL_UID`/`EVAL_GID`, so the bind-mounted `./reports` is writable on every platform.
+The Dockerfile is multi-stage (restore, build, optional `test`, publish, then a slim runtime image that defaults to a non-root user). `docker-compose.yml` runs **only EvalHarness**; the RAG API under test runs separately (locally, in its own container, or remotely) and EvalHarness calls it over HTTP. Datasets are mounted **read-only**; `./reports` is a bind mount, so reports survive the container. Compose runs the container as root unless you set `EVAL_UID`/`EVAL_GID`, so the bind-mounted `./reports` is writable on every platform.
 
-```bash
-cp .env.example .env     # then set OPENAI_API_KEY (git-ignored; never commit it)
-```
+Workflow:
 
-### 1. Full local environment
-
-`docker-compose.yml` runs DocRAG (built from `../DocRAG`, override with `DOCRAG_CONTEXT`), a one-shot `seed` job that uploads `./corpus/*` into it, and EvalHarness, all on the Compose network (`http://docrag:8080`). The workflow:
-
-1. Clone the repository and `cp .env.example .env`, set `OPENAI_API_KEY`.
-2. `./scripts/run-local.sh` (or `scripts/run-local.ps1` on Windows), which runs:
+1. Start your RAG API and ingest the documents the dataset asks about (`samples/acme-handbook.md` for the sample dataset).
+2. `cp .env.example .env`, then set `RAG_API_URL` and `OPENAI_API_KEY` (`.env` is git-ignored; never commit it).
+3. Run:
    ```bash
    docker compose run --rm --build evalharness
-   docker compose down
+   echo "exit code: $?"
    ```
-3. EvalHarness waits for DocRAG (up to 120 s), runs the dataset, prints the report, writes `./reports/*.json` on your machine, and **exits with the quality-gate exit code**, which the script returns.
+4. EvalHarness waits for the API to become ready (`RAG_WAIT_SECONDS`, default 60), runs the dataset, prints the report, writes `./reports/*.json` on your machine, and **exits with the quality-gate exit code**.
 
-Use `docker compose run` rather than `up --abort-on-container-exit`: the one-shot seed job exiting would stop an `up`.
+Inside a container `localhost` is the container itself. Use `http://host.docker.internal:<port>` for an API running on your machine, a service name if the API is on the same Docker network, or a normal URL for a remote one. For auth, add `EVALHARNESS_RagApi__Headers__Authorization` to the service's `environment`.
 
-Environment knobs (in `.env` or your shell): `EVAL_DATASET` (file in `./datasets`), `EVAL_BASELINE` (e.g. `/baselines/acme-handbook.json`, from `./baselines`), `DOCRAG_CONTEXT`. On Linux, set `EVAL_UID=$(id -u) EVAL_GID=$(id -g)` so reports are not owned by root.
+Environment knobs (in `.env` or your shell): `RAG_API_URL`, `RAG_WAIT_SECONDS`, `EVAL_DATASET` (file in `./datasets`), `EVAL_BASELINE` (e.g. `/baselines/acme-handbook.json`, from `./baselines`). On Linux, set `EVAL_UID=$(id -u) EVAL_GID=$(id -g)` so reports are not owned by root.
 
-### 2. External RAG API
-
-`docker-compose.external.yml` runs only EvalHarness against an API that is already running:
+Append CLI arguments to override the default command:
 
 ```bash
-RAG_API_URL=http://host.docker.internal:8080 \
-  docker compose -f docker-compose.external.yml run --rm --build evalharness
-```
-
-Inside a container `localhost` is the container itself; use `host.docker.internal` for an API on your machine, or a normal URL for remote ones. For auth, add `EVALHARNESS_RagApi__Headers__Authorization` to the service's `environment`. Append CLI arguments to override the default command:
-
-```bash
-docker compose -f docker-compose.external.yml run --rm evalharness \
+docker compose run --rm evalharness \
   run --dataset /datasets/acme-handbook.json --output /reports --evaluators exact-match,retrieval-quality
 ```
 
@@ -383,7 +369,7 @@ jobs:
           EVAL_BASELINE: /baselines/acme-handbook.json   # committed under baselines/
           EVAL_UID: 1001
           EVAL_GID: 1001
-        run: docker compose -f docker-compose.external.yml run --rm --build evalharness
+        run: mkdir -p reports && docker compose run --rm --build evalharness
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: rag-eval-reports, path: reports/ }
@@ -435,8 +421,8 @@ src/
   EvalHarness.Cli          Argument parsing, configuration, DI composition, commands
 tests/EvalHarness.Tests    Unit + integration tests; all fakes, no network, no real LLM
 datasets/                  Evaluation datasets (JSON)
-corpus/                    Documents the full-local Compose environment loads into the RAG API (demo setup only)
-baselines/                 Baseline reports to compare against
+samples/                   Source document(s) the sample dataset asks about; ingest into the RAG API under test
+baselines/                 Baseline reports to compare against (create it when you save your first one)
 reports/                   Generated reports (git-ignored)
 ```
 
@@ -454,4 +440,4 @@ dotnet test
 - **Single-turn Q&A** over a request/response HTTP API; no streaming or multi-turn conversations.
 - Retrieved chunks are scored in the order the API returns them; the harness cannot know the API's internal ranking beyond that.
 - The default readiness probe is a plain GET of `ReadinessPath`; any non-5xx response counts as ready.
-- **Not verified against live services.** Everything that does not need external services is covered by automated tests, and the Docker image and external Compose workflow were exercised end to end against a local stand-in for the RAG API. The OpenAI-backed evaluators and the full DocRAG Compose stack (`docker-compose.yml`) were not run live (they need an API key), so expect to adjust prompts and thresholds on first real use.
+- **Not verified against live services.** Everything that does not need external services is covered by automated tests, and the Docker image and Compose workflow were exercised end to end against a local stand-in for the RAG API. The OpenAI-backed evaluators were not run live (they need an API key), so expect to adjust prompts and thresholds on first real use.

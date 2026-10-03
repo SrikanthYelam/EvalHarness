@@ -1,54 +1,28 @@
-# Full local environment: the DocRAG API (built from a sibling checkout), a one-shot job that loads the sample
-# corpus into it, and EvalHarness, which waits for the API, runs the evaluation and exits with the quality-gate
-# result. Run it with:
+# EvalHarness only, pointed at a RAG API that is already running somewhere else (your machine, staging, a hosted
+# service). Set RAG_API_URL and run:
 #
-#   docker compose run --rm --build evalharness; echo "exit code: $?"; docker compose down
+#   RAG_API_URL=http://host.docker.internal:8080 docker compose run --rm --build evalharness
 #
-# (scripts/run-local.sh and scripts/run-local.ps1 do exactly that.) Secrets come from your shell or a git-ignored
-# .env file (see .env.example); nothing secret is stored in this file.
+# From a container, `localhost` is the container itself; use host.docker.internal for an API on your machine.
+# Pass different CLI arguments by appending them, e.g.:
+#   docker compose run --rm evalharness run --dataset /datasets/acme-handbook.json --output /reports --evaluators exact-match,retrieval-quality
+#
+# Secrets come from your shell or a git-ignored .env file (see .env.example); nothing secret is stored here.
 name: evalharness
 
 services:
-  docrag:
-    build:
-      context: ${DOCRAG_CONTEXT:-../DocRAG}
-    environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in your environment or a .env file}
-    volumes:
-      - docrag-data:/data
-    # Not published to the host: EvalHarness reaches it over the compose network at http://docrag:8080.
-    # To poke at it from the host, add:  ports: ["8080:8080"]
-
-  # One-shot: uploads everything in ./corpus to the RAG API so the dataset's questions are answerable.
-  # This is environment setup for the demo; EvalHarness itself never ingests documents.
-  seed:
-    image: curlimages/curl:8.11.1
-    depends_on:
-      - docrag
-    volumes:
-      - ./corpus:/corpus:ro
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -e
-        for f in /corpus/*; do
-          echo "Ingesting $$f"
-          curl -fsS --retry 30 --retry-delay 2 --retry-connrefused --retry-all-errors \
-            -F "file=@$$f" http://docrag:8080/documents
-          echo
-        done
-
   evalharness:
     build: .
-    depends_on:
-      seed:
-        condition: service_completed_successfully
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in your environment or a .env file}
-      EVALHARNESS_RagApi__BaseUrl: http://docrag:8080
-      EVALHARNESS_RagApi__WaitForReadySeconds: "120"
-      # Optional: path (inside the container) of a baseline report to compare against, e.g. /baselines/acme.json
+      # Needed by the LLM/embedding-based evaluators; may be empty when running only --evaluators that need no provider.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EVALHARNESS_RagApi__BaseUrl: ${RAG_API_URL:?Set RAG_API_URL to the RAG API base URL}
+      EVALHARNESS_RagApi__WaitForReadySeconds: ${RAG_WAIT_SECONDS:-60}
+      # For APIs that need auth, set e.g. EVALHARNESS_RagApi__Headers__Authorization in your shell or .env and add it here.
+      # Optional: path (inside the container) of a baseline report to compare against, e.g. /baselines/acme-handbook.json
       EVALHARNESS_Baseline: ${EVAL_BASELINE:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # Root by default so the bind-mounted ./reports is writable on every platform. On Linux, set
     # EVAL_UID=$(id -u) EVAL_GID=$(id -g) so the reports are owned by you.
     user: "${EVAL_UID:-0}:${EVAL_GID:-0}"
@@ -57,6 +31,3 @@ services:
       - ./baselines:/baselines:ro
       - ./reports:/reports
     command: ["run", "--dataset", "/datasets/${EVAL_DATASET:-acme-handbook.json}", "--output", "/reports"]
-
-volumes:
-  docrag-data:

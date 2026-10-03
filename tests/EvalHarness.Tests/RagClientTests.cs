@@ -179,7 +179,7 @@ public class RetryHandlerTests
 
 public class HttpRagClientTests
 {
-    private const string DocRagResponse = """
+    private const string SampleResponse = """
         {
           "question": "How many vacation days?",
           "status": "Answered",
@@ -197,9 +197,9 @@ public class HttpRagClientTests
         new(new HttpClient(handler), options ?? new RagApiOptions { BaseUrl = "http://rag.test" }, readinessPollInterval: TimeSpan.FromMilliseconds(10));
 
     [Fact]
-    public async Task Maps_the_default_docrag_response()
+    public async Task Maps_the_default_response_shape()
     {
-        var response = await Client(StubHandler.Json(HttpStatusCode.OK, DocRagResponse)).AskAsync("How many vacation days?", default);
+        var response = await Client(StubHandler.Json(HttpStatusCode.OK, SampleResponse)).AskAsync("How many vacation days?", default);
 
         Assert.Equal("18 days per year [1].", response.Answer);
         Assert.Equal("Answered", response.Status);
@@ -226,7 +226,7 @@ public class HttpRagClientTests
     [Fact]
     public async Task Request_body_uses_configured_fields_and_types()
     {
-        var handler = StubHandler.Json(HttpStatusCode.OK, DocRagResponse);
+        var handler = StubHandler.Json(HttpStatusCode.OK, SampleResponse);
         var options = new RagApiOptions
         {
             BaseUrl = "http://rag.test/", QuestionField = "query",
@@ -242,7 +242,7 @@ public class HttpRagClientTests
     public async Task Url_and_headers_come_from_options()
     {
         HttpRequestMessage? seen = null;
-        var handler = new StubHandler((req, _) => { seen = req; return Task.FromResult(StubHandler.JsonResponse(HttpStatusCode.OK, DocRagResponse)); });
+        var handler = new StubHandler((req, _) => { seen = req; return Task.FromResult(StubHandler.JsonResponse(HttpStatusCode.OK, SampleResponse)); });
         var options = new RagApiOptions { BaseUrl = "https://rag.example/api/", AskPath = "/v2/ask", Headers = { ["Authorization"] = "Bearer abc" } };
 
         await Client(handler, options).AskAsync("q", default);
@@ -310,7 +310,7 @@ public class HttpRagClientTests
     [Fact]
     public async Task Latency_and_attempts_come_from_the_retry_handler()
     {
-        var inner = new StubHandler((_, call) => Task.FromResult(StubHandler.JsonResponse(call < 2 ? HttpStatusCode.BadGateway : HttpStatusCode.OK, DocRagResponse)));
+        var inner = new StubHandler((_, call) => Task.FromResult(StubHandler.JsonResponse(call < 2 ? HttpStatusCode.BadGateway : HttpStatusCode.OK, SampleResponse)));
         var pipeline = new RetryHandler(new RetryPolicy { BaseDelay = TimeSpan.Zero }, delay: (_, _) => Task.CompletedTask) { InnerHandler = inner };
         var client = new HttpRagClient(new HttpClient(pipeline), new RagApiOptions { BaseUrl = "http://rag.test" });
 

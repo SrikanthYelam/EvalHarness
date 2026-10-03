@@ -1,6 +1,6 @@
 {
   "name": "acme-handbook",
-  "description": "Questions answerable from DocRAG's samples/acme-handbook.md. Ingest that file into the RAG API before running.",
+  "description": "Questions answerable from samples/acme-handbook.md. Ingest that file into the RAG API under test before running.",
   "testCases": [
     {
       "id": "vacation-carryover",

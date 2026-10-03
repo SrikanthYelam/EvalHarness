@@ -11,5 +11,4 @@ TestResults/
 !.env.example
 
 # Generated reports (promote one to baselines/ to use it as a baseline)
-reports/*
-!reports/.gitkeep
+reports/

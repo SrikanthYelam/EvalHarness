@@ -1,7 +1,7 @@
 namespace EvalHarness.Core;
 
 /// <summary>
-/// How to talk to the RAG API. The defaults match the sample DocRAG API; point the mapping properties at another
+/// How to talk to the RAG API. The defaults match a common response shape (see README); point the mapping properties at another
 /// API's JSON shape to evaluate it without code changes. Paths are dot-separated property names.
 /// </summary>
 public sealed class RagApiOptions
