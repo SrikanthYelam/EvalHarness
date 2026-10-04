@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
@@ -22,7 +23,9 @@
     <ProjectReference Include="..\..\src\EvalHarness.Evaluators\EvalHarness.Evaluators.csproj" />
     <ProjectReference Include="..\..\src\EvalHarness.Runner\EvalHarness.Runner.csproj" />
     <ProjectReference Include="..\..\src\EvalHarness.Reporting\EvalHarness.Reporting.csproj" />
+    <ProjectReference Include="..\..\src\EvalHarness.Hosting\EvalHarness.Hosting.csproj" />
     <ProjectReference Include="..\..\src\EvalHarness.Cli\EvalHarness.Cli.csproj" />
+    <ProjectReference Include="..\..\src\EvalHarness.Api\EvalHarness.Api.csproj" />
   </ItemGroup>
 
 </Project>

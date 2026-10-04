@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 
-namespace EvalHarness.Cli;
+namespace EvalHarness.Hosting;
 
 /// <summary>Wires configuration, HTTP pipelines (with retries), providers and the runner.</summary>
 public static class Composition

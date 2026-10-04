@@ -1,6 +1,6 @@
 # EvalHarness
 
-EvalHarness is an **independent evaluation harness for RAG question-answering APIs**. It treats your RAG system as a black box behind HTTP, sends it a dataset of questions, scores what comes back from several angles, compares the result with a previous run, and exits with a CI-friendly code.
+EvalHarness is an **independent evaluation harness for RAG question-answering APIs**. It treats your RAG system as a black box behind HTTP, sends it a dataset of questions, scores what comes back from several angles, and compares the result with a previous run. Use it as a **CLI** (CI-friendly exit codes) or run it as an **API service** (start a run with `POST /runs`, poll it, fetch the report).
 
 It is **not** a RAG application. It does not ingest documents, host a vector store, or embed your RAG code. The RAG API stays a separate, replaceable dependency, so the same harness can test a local build, a Docker container, or a hosted service.
 
@@ -28,6 +28,7 @@ EvalHarness works with any API that takes a question and returns an answer plus 
 - [Quality gates and regression testing](#quality-gates-and-regression-testing)
 - [CLI reference and exit codes](#cli-reference-and-exit-codes)
 - [Configuration](#configuration)
+- [API service](#api-service)
 - [Docker](#docker)
 - [CI/CD](#cicd)
 - [Adding a new evaluator](#adding-a-new-evaluator)
@@ -318,33 +319,132 @@ Paths are dot-separated property names (case-insensitive). `RequestFields` value
 
 Default mapping: the request is `{"question": ...}`; the response is expected to contain `answer`, optional `status`, and a ranked `retrievedChunks` array whose items have `id`, `sourceFile`, `text` and `score`. These are the retrieved context. A `null` answer is scored as "no answer" (the correctness judge fails it, faithfulness treats it as vacuously faithful). `/openapi/v1.json` is the default readiness probe; change `ReadinessPath` for your API.
 
+## API service
+
+The same evaluation engine is available as a long-running HTTP service, so a pipeline, a script or a teammate can start a run on demand without a shell on the server. The CLI and the batch Docker mode are unchanged, and CI can keep using whichever is simpler (the CLI's exit code, or this API's `passed` field).
+
+Runs are **asynchronous**: an evaluation takes seconds to minutes, so `POST /runs` validates the request, queues the run and returns `202 Accepted` with a run id. You poll `GET /runs/{id}` until it finishes and then fetch the report.
+
+### Run it
+
+```powershell
+$env:EVALHARNESS_Api__Key = "choose-a-long-random-secret"     # callers must send this as X-Api-Key
+$env:OPENAI_API_KEY = "sk-..."                                  # judge and embedding evaluators
+$env:EVALHARNESS_RagApi__BaseUrl = "http://localhost:8080"      # default RAG API for runs that do not pass ragUrl
+dotnet run --project src/EvalHarness.Api --urls http://localhost:8090
+```
+
+Swagger UI is at `http://localhost:8090/swagger` (use *Authorize* to enter the key). With Docker, see [Docker](#docker).
+
+### Endpoints
+
+Everything except `/health` and the Swagger UI needs the `X-Api-Key` header.
+
+| Method and path | Purpose |
+| --- | --- |
+| `POST /runs` | Start a run. `202` with the run record and a `Location` header; `400`/`404` for a bad request, `429` when the queue is full. |
+| `GET /runs/{id}` | Status and progress (`Queued`, `Running`, `Completed`, `Failed`, `Cancelled`). |
+| `GET /runs/{id}/report` | The full report: aggregate metrics, every test and evaluator result, quality gates and regression. The same JSON the CLI writes. `409` while the run is still in progress. |
+| `POST /runs/{id}/cancel` | Cancel a queued or running run. A running one keeps a partial report. |
+| `GET /runs?limit=50` | Recent runs, newest first. |
+| `GET /datasets` | Dataset names usable in a request. |
+| `GET /evaluators` | The available evaluators and their defaults. |
+| `GET /health` | Liveness, no key needed. |
+
+### Starting a run
+
+Only `dataset` is required.
+
+```bash
+curl -X POST http://localhost:8090/runs \
+  -H "X-Api-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{
+        "dataset": "acme-handbook",
+        "ragUrl": "http://host.docker.internal:8080",
+        "evaluators": ["answer-correctness", "faithfulness", "retrieval-quality"],
+        "parallelism": 4,
+        "baselineRunId": "3f2a9c0e5b7d4e19a6c1d2e3f4a5b6c7"
+      }'
+```
+
+| Field | Notes |
+| --- | --- |
+| `dataset` | A file name from `GET /datasets` (the `.json` extension is omitted). Datasets are server-side files, so the server never parses arbitrary uploaded content. |
+| `ragUrl` | Optional. Overrides the default RAG API for this run, but only if it matches the allowlist (below). |
+| `evaluators` | Optional subset, as with the CLI's `--evaluators`. |
+| `parallelism` | Optional, 1 to 32. |
+| `baselineRunId` | Optional. The id of an earlier **completed** run to compare against for regression detection. |
+
+Then poll and fetch:
+
+```bash
+curl -H "X-Api-Key: $KEY" http://localhost:8090/runs/$ID           # status, progress {completed,total}
+curl -H "X-Api-Key: $KEY" http://localhost:8090/runs/$ID/report    # when status is Completed
+```
+
+A finished run record carries the CLI's verdict: `passed` is true only for exit code 0, and `exitCode` / `outcome` use the same values as the [CLI](#cli-reference-and-exit-codes): `0` / `Passed`, `1` / `QualityFailure`, `3` / `Inconclusive` (RAG API or evaluator errors), `130` / `Cancelled`. A run's `status` says whether it ran to the end, while `passed` and `outcome` say how the RAG system did. A RAG API outage therefore gives `status: Completed` with `outcome: Inconclusive`, not a failure of the service. `status: Failed` means the run itself could not complete (for example the RAG API never became ready, or an internal error); `error` says why.
+
+### Security
+
+- **API key.** The service refuses to start without `Api:Key`, so it cannot be left open by accident. Setting `Api:AllowAnonymous=true` is an explicit opt-out for a network you control. The key is compared in constant time and should come from an environment variable, never a file. It travels in a header, so put TLS in front of the service (a reverse proxy or load balancer) when it is reachable beyond your machine.
+- **`ragUrl` allowlist.** A service that calls any URL a caller names can be used to probe your internal network (server-side request forgery, for example cloud metadata addresses). So a request's `ragUrl` must match the configured `RagApi:BaseUrl` or an entry in `Api:AllowedRagUrls` (same scheme, host and port, and a path that starts with the allowed path). Credentials, query strings and fragments in the URL are rejected. Note that any `RagApi:Headers` configured on the server (for example an `Authorization` header) are sent to whichever allowed URL a run uses, so only allowlist hosts that should receive them.
+- **Budget.** Every run spends LLM calls, so authenticated callers spend your provider budget. `Api:MaxConcurrentRuns` (default 1) limits how many run at once and `Api:MaxQueuedRuns` (default 10) bounds the wait queue; beyond that, requests get `429`.
+- **Paths.** Dataset names and run ids are validated against strict patterns before they touch a file path.
+
+### Settings
+
+Set in `appsettings.json` or as environment variables (`EVALHARNESS_Api__Key`, ...). The evaluation settings (`RagApi`, `Evaluation`, `Llm`, `QualityGates`, `Regression`, ...) work exactly as for the CLI, see [Configuration](#configuration).
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `Api:Key` | none, required | Value callers send in `X-Api-Key`. |
+| `Api:AllowAnonymous` | `false` | Run without authentication (trusted network only). |
+| `Api:DatasetsDirectory` | `datasets` | Folder of dataset files (`/datasets` in Docker). |
+| `Api:DataDirectory` | `data` | Run history and reports (`/data` in Docker). |
+| `Api:AllowedRagUrls` | empty | Extra `ragUrl` values, comma- or semicolon-separated. |
+| `Api:MaxConcurrentRuns` | `1` | Runs executing at once. |
+| `Api:MaxQueuedRuns` | `10` | Runs allowed to wait for a slot. |
+
+### History and restarts
+
+Each run is stored as two files under `Api:DataDirectory/runs`: `{id}.run.json` (the status record) and `{id}.report.json` (the report, in the CLI's format, so it also works as a CLI `--baseline`). Mount a volume there to keep history across restarts. A run that was queued or running when the service stopped is marked `Failed` ("Interrupted by a service restart") on the next start. On a graceful shutdown, running runs are cancelled and write their partial reports first. The file store is meant for **one service instance**; do not point several replicas at the same folder.
+
 ## Docker
 
-The Dockerfile is multi-stage (restore, build, optional `test`, publish, then a slim runtime image that defaults to a non-root user). `docker-compose.yml` runs **only EvalHarness**; the RAG API under test runs separately (locally, in its own container, or remotely) and EvalHarness calls it over HTTP. Datasets are mounted **read-only**; `./reports` is a bind mount, so reports survive the container. Compose runs the container as root unless you set `EVAL_UID`/`EVAL_GID`, so the bind-mounted `./reports` is writable on every platform.
+The Dockerfile is multi-stage (restore, build, `test`, publish, then slim runtime images that default to a non-root user) and has three targets: `api` (the default), `cli` (the one-shot batch run) and `test`. `docker-compose.yml` runs **only EvalHarness**; the RAG API under test runs separately (locally, in its own container, or remotely) and EvalHarness calls it over HTTP. Datasets are mounted **read-only**.
 
-Workflow:
+First, `cp .env.example .env` and fill it in (`.env` is git-ignored; never commit it). Start your RAG API and ingest the documents the dataset asks about (`samples/acme-handbook.md` for the sample dataset).
 
-1. Start your RAG API and ingest the documents the dataset asks about (`samples/acme-handbook.md` for the sample dataset).
-2. `cp .env.example .env`, then set `RAG_API_URL` and `OPENAI_API_KEY` (`.env` is git-ignored; never commit it).
-3. Run:
-   ```bash
-   docker compose run --rm --build evalharness
-   echo "exit code: $?"
-   ```
-4. EvalHarness waits for the API to become ready (`RAG_WAIT_SECONDS`, default 60), runs the dataset, prints the report, writes `./reports/*.json` on your machine, and **exits with the quality-gate exit code**.
+Inside a container `localhost` is the container itself. Use `http://host.docker.internal:<port>` for an API running on your machine, a service name if the API is on the same Docker network, or a normal URL for a remote one.
 
-Inside a container `localhost` is the container itself. Use `http://host.docker.internal:<port>` for an API running on your machine, a service name if the API is on the same Docker network, or a normal URL for a remote one. For auth, add `EVALHARNESS_RagApi__Headers__Authorization` to the service's `environment`.
+### API service (default)
 
-Environment knobs (in `.env` or your shell): `RAG_API_URL`, `RAG_WAIT_SECONDS`, `EVAL_DATASET` (file in `./datasets`), `EVAL_BASELINE` (e.g. `/baselines/acme-handbook.json`, from `./baselines`). On Linux, set `EVAL_UID=$(id -u) EVAL_GID=$(id -g)` so reports are not owned by root.
+```bash
+# .env: EVAL_API_KEY=<secret callers will send>, OPENAI_API_KEY=sk-..., RAG_API_URL=http://host.docker.internal:8080
+docker compose up -d --build
+# -> http://localhost:8090/swagger   (change the host port with EVAL_API_PORT)
+docker compose logs -f evalharness-api
+```
 
-Append CLI arguments to override the default command:
+Run history is kept in the `evalharness-data` volume. Knobs in `.env`: `EVAL_API_KEY` (required), `RAG_API_URL` (default RAG API), `RAG_ALLOWED_URLS` (extra URLs a request may pass as `ragUrl`, comma-separated), `RAG_WAIT_SECONDS`, `EVAL_MAX_CONCURRENT_RUNS`, `EVAL_API_PORT`. If the container exits immediately, `docker compose logs` will show why (usually a missing `EVAL_API_KEY`).
+
+### One-shot batch run (CI)
+
+```bash
+docker compose run --rm --build evalharness
+echo "exit code: $?"
+```
+
+This waits for the RAG API (`RAG_WAIT_SECONDS`, default 60), runs the dataset, prints the report, writes `./reports/*.json` on your machine and **exits with the quality-gate exit code**. Compose runs it as root unless you set `EVAL_UID`/`EVAL_GID`, so the bind-mounted `./reports` is writable on every platform (on Linux, set `EVAL_UID=$(id -u) EVAL_GID=$(id -g)`). Further knobs: `EVAL_DATASET` (file in `./datasets`) and `EVAL_BASELINE` (e.g. `/baselines/acme-handbook.json`, from `./baselines`). Append CLI arguments to override the default command:
 
 ```bash
 docker compose run --rm evalharness \
   run --dataset /datasets/acme-handbook.json --output /reports --evaluators exact-match,retrieval-quality
 ```
 
-> **Git Bash on Windows** rewrites arguments that start with `/` into Windows paths. Run `export MSYS_NO_PATHCONV=1` first (the script does), or use PowerShell.
+For a RAG API that needs auth, add `EVALHARNESS_RagApi__Headers__Authorization` to the service's `environment`.
+
+> **Git Bash on Windows** rewrites arguments that start with `/` into Windows paths. Run `export MSYS_NO_PATHCONV=1` first, or use PowerShell.
 
 ### Running the tests in Docker
 
@@ -418,7 +518,10 @@ src/
   EvalHarness.Runner       EvaluationRunner (parallel, fault-isolated), ResultAggregator, QualityGateEvaluator,
                            RegressionDetector, ExitCodes
   EvalHarness.Reporting    ConsoleReportWriter, JsonReportStore (write + read baselines)
-  EvalHarness.Cli          Argument parsing, configuration, DI composition, commands
+  EvalHarness.Hosting      DI composition and PreparedEvaluation (wait for ready, run, gates, regression),
+                           shared by the CLI and the API
+  EvalHarness.Cli          Argument parsing, configuration, commands, exit codes
+  EvalHarness.Api          ASP.NET Core service: API-key auth, run queue, file-based history, ragUrl allowlist
 tests/EvalHarness.Tests    Unit + integration tests; all fakes, no network, no real LLM
 datasets/                  Evaluation datasets (JSON)
 samples/                   Source document(s) the sample dataset asks about; ingest into the RAG API under test
@@ -426,7 +529,7 @@ baselines/                 Baseline reports to compare against (create it when y
 reports/                   Generated reports (git-ignored)
 ```
 
-Dependencies point inward: evaluators and the runner see only `RagResponse` and interfaces, never HTTP or the API's field names. Tests cover dataset validation, cosine and vector maths, exact match, retrieval metrics and matching, each evaluator against a fake judge, aggregation, retry/backoff/`Retry-After`/timeout behaviour, RAG API failure mapping, cancellation, parallelism limits, regression detection, quality gates and exit codes, report round-tripping, and the CLI end to end with fakes:
+Dependencies point inward: evaluators and the runner see only `RagResponse` and interfaces, never HTTP or the API's field names. Tests cover dataset validation, cosine and vector maths, exact match, retrieval metrics and matching, each evaluator against a fake judge, aggregation, retry/backoff/`Retry-After`/timeout behaviour, RAG API failure mapping, cancellation, parallelism limits, regression detection, quality gates and exit codes, report round-tripping, the CLI end to end with fakes, and the API (auth, run lifecycle, validation, allowlist, baselines, cancel, queue limits, persistence) through an in-process test server:
 
 ```bash
 dotnet test
@@ -434,6 +537,7 @@ dotnet test
 
 ## Limitations
 
+- **API service scope**: one shared API key (no per-user accounts or rate limits per caller), an in-memory queue, and a file-based history intended for a single instance. Runs interrupted by a restart are marked failed, not resumed. Datasets are server-side files; there is no upload endpoint.
 - **Single provider shipped**: OpenAI and OpenAI-compatible endpoints (set `BaseUrl`). Others need an `ILlmClient`/`IEmbeddingClient`.
 - **Judge variance**: LLM judges are noisy even at temperature 0, and a judge model change shifts scores. Keep regression allowances above that noise, pin the judge model, and re-baseline when you change it.
 - **Questions the RAG should decline** (no answer in the documents) are not modelled yet: every test needs an expected answer and source.

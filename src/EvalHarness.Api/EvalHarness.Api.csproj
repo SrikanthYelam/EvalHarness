@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <AssemblyName>EvalHarness.Api</AssemblyName>
+    <RootNamespace>EvalHarness.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EvalHarness.Core\EvalHarness.Core.csproj" />
+    <ProjectReference Include="..\EvalHarness.Evaluators\EvalHarness.Evaluators.csproj" />
+    <ProjectReference Include="..\EvalHarness.Runner\EvalHarness.Runner.csproj" />
+    <ProjectReference Include="..\EvalHarness.Reporting\EvalHarness.Reporting.csproj" />
+    <ProjectReference Include="..\EvalHarness.Hosting\EvalHarness.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One copy of the evaluation defaults (RagApi, Evaluation, Llm, QualityGates, ...) shared with the CLI. -->
+    <Content Include="..\EvalHarness.Cli\appsettings.json" Link="evalharness.defaults.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

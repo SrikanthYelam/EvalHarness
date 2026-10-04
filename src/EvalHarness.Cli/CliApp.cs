@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EvalHarness.Core;
 using EvalHarness.Evaluators;
+using EvalHarness.Hosting;
 using EvalHarness.Reporting;
 using EvalHarness.Runner;
 using Microsoft.Extensions.Configuration;
@@ -92,47 +93,29 @@ public static class CliApp
         }
 
         var config = BuildConfiguration(args.Get("config"), overrides);
-        var ragOptions = Composition.Bind<RagApiOptions>(config, RagApiOptions.SectionName);
-        if (ragOptions.WaitForReadySeconds < 0 || Composition.Bind<EvaluationOptions>(config, EvaluationOptions.SectionName).MaxParallelism < 1)
-            throw new UsageException("--wait-for-ready must be >= 0 and --parallelism must be >= 1.");
-        if (!Uri.TryCreate(ragOptions.BaseUrl, UriKind.Absolute, out var baseUri) || baseUri.Scheme is not ("http" or "https"))
-            throw new UsageException($"RagApi:BaseUrl '{ragOptions.BaseUrl}' is not a valid http(s) URL.");
 
         // Fail fast, before spending any LLM budget, on anything that would make the run unusable.
         var dataset = DatasetLoader.Load(datasetPath, EvaluatorNames.All);
         var baselinePath = args.Get("baseline") ?? config["Baseline"]; // config/env fallback lets Docker Compose supply it
         var baseline = string.IsNullOrWhiteSpace(baselinePath) ? null : await JsonReportStore.ReadAsync(baselinePath, ct);
 
-        await using var services = Composition.Build(config, configureServices);
-        var runner = services.GetRequiredService<EvaluationRunner>(); // throws ConfigurationException (e.g. missing API key)
+        await using var evaluation = PreparedEvaluation.Create(config, configureServices); // throws ConfigurationException
 
-        if (ragOptions.WaitForReadySeconds > 0)
+        EvaluationRun run;
+        try
         {
-            try
-            {
-                await services.GetRequiredService<IRagClient>()
-                    .WaitUntilReadyAsync(TimeSpan.FromSeconds(ragOptions.WaitForReadySeconds), ct);
-            }
-            catch (RagApiException ex)
-            {
-                stderr.WriteLine($"error: {ex.Message}");
-                return ExitCodes.Inconclusive;
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                stderr.WriteLine("Cancelled while waiting for the RAG API.");
-                return ExitCodes.Cancelled;
-            }
+            run = await evaluation.ExecuteAsync(dataset, baseline, ct);
         }
-
-        var run = await runner.RunAsync(dataset, baseUri.GetComponents(UriComponents.SchemeAndServer | UriComponents.Path, UriFormat.UriEscaped), ct);
-        run = run with
+        catch (RagApiException ex)
         {
-            QualityGates = QualityGateEvaluator.Evaluate(run.Aggregate, Composition.Bind<QualityGateOptions>(config, QualityGateOptions.SectionName), run.Run.Evaluators),
-            Regression = baseline is null
-                ? null
-                : RegressionDetector.Compare(baseline, run, Composition.Bind<RegressionOptions>(config, RegressionOptions.SectionName)),
-        };
+            stderr.WriteLine($"error: {ex.Message}");
+            return ExitCodes.Inconclusive;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            stderr.WriteLine("Cancelled while waiting for the RAG API.");
+            return ExitCodes.Cancelled;
+        }
 
         // Written even for a cancelled run so partial results are not lost.
         var reportPath = await JsonReportStore.WriteToDirectoryAsync(run, args.Get("output") ?? "reports", CancellationToken.None);

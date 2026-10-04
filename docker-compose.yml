@@ -1,24 +1,48 @@
-# EvalHarness only, pointed at a RAG API that is already running somewhere else (your machine, staging, a hosted
-# service). Set RAG_API_URL and run:
+# EvalHarness, pointed at a RAG API that runs separately (your machine, staging, a hosted service).
 #
-#   RAG_API_URL=http://host.docker.internal:8080 docker compose run --rm --build evalharness
-#
-# From a container, `localhost` is the container itself; use host.docker.internal for an API on your machine.
-# Pass different CLI arguments by appending them, e.g.:
-#   docker compose run --rm evalharness run --dataset /datasets/acme-handbook.json --output /reports --evaluators exact-match,retrieval-quality
+# API service (default):   docker compose up -d --build      -> http://localhost:8090/swagger
+# One-shot batch run (CI): docker compose run --rm --build evalharness
 #
 # Secrets come from your shell or a git-ignored .env file (see .env.example); nothing secret is stored here.
+# From a container, `localhost` is the container itself; use host.docker.internal for an API on your machine.
 name: evalharness
 
 services:
-  evalharness:
-    build: .
+  evalharness-api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "${EVAL_API_PORT:-8090}:8080"
     environment:
-      # Needed by the LLM/embedding-based evaluators; may be empty when running only --evaluators that need no provider.
+      # Callers must send this as the X-Api-Key header. The service refuses to start without one (check `docker compose logs`).
+      EVALHARNESS_Api__Key: ${EVAL_API_KEY:-}
+      # Judge LLM / embeddings. May be empty if every request selects only evaluators that need no provider.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      EVALHARNESS_RagApi__BaseUrl: ${RAG_API_URL:?Set RAG_API_URL to the RAG API base URL}
+      # Default RAG API for runs that do not pass "ragUrl".
+      EVALHARNESS_RagApi__BaseUrl: ${RAG_API_URL:-http://host.docker.internal:8080}
       EVALHARNESS_RagApi__WaitForReadySeconds: ${RAG_WAIT_SECONDS:-60}
-      # For APIs that need auth, set e.g. EVALHARNESS_RagApi__Headers__Authorization in your shell or .env and add it here.
+      # Other RAG API URLs a request may pass as "ragUrl" (comma-separated). Empty means only RAG_API_URL.
+      EVALHARNESS_Api__AllowedRagUrls: ${RAG_ALLOWED_URLS:-}
+      EVALHARNESS_Api__MaxConcurrentRuns: ${EVAL_MAX_CONCURRENT_RUNS:-1}
+      # For RAG APIs that need auth, set EVALHARNESS_RagApi__Headers__Authorization here (from your shell or .env).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./datasets:/datasets:ro
+      - evalharness-data:/data
+    restart: unless-stopped
+
+  # One-shot batch mode for CI: runs the dataset, writes ./reports, exits with the quality-gate exit code.
+  evalharness:
+    profiles: ["batch"]
+    build:
+      context: .
+      target: cli
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EVALHARNESS_RagApi__BaseUrl: ${RAG_API_URL:-http://host.docker.internal:8080}
+      EVALHARNESS_RagApi__WaitForReadySeconds: ${RAG_WAIT_SECONDS:-60}
       # Optional: path (inside the container) of a baseline report to compare against, e.g. /baselines/acme-handbook.json
       EVALHARNESS_Baseline: ${EVAL_BASELINE:-}
     extra_hosts:
@@ -31,3 +55,6 @@ services:
       - ./baselines:/baselines:ro
       - ./reports:/reports
     command: ["run", "--dataset", "/datasets/${EVAL_DATASET:-acme-handbook.json}", "--output", "/reports"]
+
+volumes:
+  evalharness-data:

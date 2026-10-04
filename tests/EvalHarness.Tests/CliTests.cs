@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EvalHarness.Cli;
+using EvalHarness.Hosting;
 using EvalHarness.Core;
 using EvalHarness.Reporting;
 using Microsoft.Extensions.Configuration;

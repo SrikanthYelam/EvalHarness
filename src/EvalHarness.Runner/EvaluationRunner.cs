@@ -16,7 +16,9 @@ public sealed class EvaluationRunner(
     int maxParallelism,
     ILogger<EvaluationRunner>? logger = null)
 {
-    public async Task<EvaluationRun> RunAsync(Dataset dataset, string target, CancellationToken cancellationToken)
+    /// <param name="onTestCompleted">Called (possibly concurrently) as each test finishes; used for progress reporting.</param>
+    public async Task<EvaluationRun> RunAsync(
+        Dataset dataset, string target, CancellationToken cancellationToken, Action<TestResult>? onTestCompleted = null)
     {
         var started = DateTimeOffset.UtcNow;
         var stopwatch = Stopwatch.StartNew();
@@ -31,7 +33,12 @@ public sealed class EvaluationRunner(
             await Parallel.ForEachAsync(
                 Enumerable.Range(0, slots.Length),
                 new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, maxParallelism), CancellationToken = cancellationToken },
-                async (index, ct) => slots[index] = await RunTestAsync(dataset.TestCases[index], ct));
+                async (index, ct) =>
+                {
+                    var result = await RunTestAsync(dataset.TestCases[index], ct);
+                    slots[index] = result;
+                    onTestCompleted?.Invoke(result);
+                });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
