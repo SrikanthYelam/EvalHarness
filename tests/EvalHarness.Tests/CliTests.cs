@@ -389,6 +389,48 @@ public class CliTests : IDisposable
         Assert.Equal(1, exit);
     }
 
+    // The other tests replace the LLM/embedding clients with fakes; these exercise the real DI wiring.
+    [Fact]
+    public void Real_provider_clients_resolve_from_the_container_when_a_key_is_configured()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Llm:ApiKey"] = "sk-test", ["Embedding:ApiKey"] = "sk-test",
+        }).Build();
+
+        using var services = Composition.Build(config);
+
+        Assert.NotNull(services.GetRequiredService<ILlmClient>());
+        Assert.NotNull(services.GetRequiredService<IEmbeddingClient>());
+        Assert.NotNull(services.GetRequiredService<IRagClient>());
+        Assert.NotNull(services.GetRequiredService<EvalHarness.Runner.EvaluationRunner>()); // default evaluators incl. LLM ones
+    }
+
+    [Fact]
+    public void Real_provider_clients_report_a_missing_key_as_a_configuration_error()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Llm:ApiKeyEnvVar"] = "EVALHARNESS_UNSET_KEY", ["Embedding:ApiKeyEnvVar"] = "EVALHARNESS_UNSET_KEY",
+        }).Build();
+        using var services = Composition.Build(config);
+
+        Assert.Throws<ConfigurationException>(() => services.GetRequiredService<ILlmClient>());
+    }
+
+    [Fact]
+    public void Unsupported_provider_is_a_configuration_error()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Llm:Provider"] = "Mystery", ["Llm:ApiKey"] = "sk-test",
+        }).Build();
+        using var services = Composition.Build(config);
+
+        var ex = Assert.Throws<ConfigurationException>(() => services.GetRequiredService<ILlmClient>());
+        Assert.Contains("Mystery", ex.Message);
+    }
+
     [Fact]
     public void Shipped_appsettings_bind_to_the_option_classes()
     {

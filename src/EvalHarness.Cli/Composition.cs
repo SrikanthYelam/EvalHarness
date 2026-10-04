@@ -46,10 +46,11 @@ public static class Composition
             .ConfigureHttpClient(c => c.Timeout = Timeout.InfiniteTimeSpan) // per-attempt timeouts live in RetryHandler
             .AddHttpMessageHandler(sp => Retry(sp, rag.MaxRetries, rag.RetryBaseDelayMs, rag.TimeoutSeconds));
 
-        services.AddHttpClient<OpenAiChatClient>(http => new OpenAiChatClient(http, RequireOpenAi(llm)))
+        // The (client, provider) form is a factory; a bare `http => ...` would bind to the Action<HttpClient> overload.
+        services.AddHttpClient<OpenAiChatClient, OpenAiChatClient>((http, _) => new OpenAiChatClient(http, RequireOpenAi(llm)))
             .ConfigureHttpClient(c => c.Timeout = Timeout.InfiniteTimeSpan)
             .AddHttpMessageHandler(sp => Retry(sp, llm.MaxRetries, llm.RetryBaseDelayMs, llm.TimeoutSeconds));
-        services.AddHttpClient<OpenAiEmbeddingClient>(http => new OpenAiEmbeddingClient(http, RequireOpenAi(embedding)))
+        services.AddHttpClient<OpenAiEmbeddingClient, OpenAiEmbeddingClient>((http, _) => new OpenAiEmbeddingClient(http, RequireOpenAi(embedding)))
             .ConfigureHttpClient(c => c.Timeout = Timeout.InfiniteTimeSpan)
             .AddHttpMessageHandler(sp => Retry(sp, embedding.MaxRetries, embedding.RetryBaseDelayMs, embedding.TimeoutSeconds));
 
