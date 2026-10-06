@@ -322,9 +322,31 @@ public class ApiTests : IDisposable
     public async Task Invalid_options_are_rejected_up_front()
     {
         Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", evaluators = new[] { "nonsense" } })).Response.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", evaluators = Array.Empty<string>() })).Response.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", parallelism = 0 })).Response.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", parallelism = 500 })).Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Blank_optional_fields_mean_not_provided()
+    {
+        // What a form or template that pre-fills every field sends when nothing is filled in.
+        var done = await RunToEnd(new { dataset = "sample", ragUrl = "", evaluators = Array.Empty<string>(), parallelism = 0, baselineRunId = "" });
+
+        Assert.Equal(RunStatus.Completed, done.Status);
+        Assert.Null(done.Request.RagUrl);
+        Assert.Null(done.Request.Evaluators);
+        Assert.Null(done.Request.Parallelism);
+        Assert.Null(done.Request.BaselineRunId);
+        var report = await Client.GetFromJsonAsync<EvaluationRun>($"/runs/{done.Id}/report", Json);
+        Assert.Equal(4, report!.Run.MaxParallelism); // the default, not 0
+    }
+
+    [Fact]
+    public async Task Swagger_placeholder_values_are_still_rejected_rather_than_silently_ignored()
+    {
+        Assert.Equal(HttpStatusCode.NotFound, (await Post(new { dataset = "string" })).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", ragUrl = "string" })).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", evaluators = new[] { "string" } })).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", baselineRunId = "string" })).Response.StatusCode);
     }
 
     [Theory]

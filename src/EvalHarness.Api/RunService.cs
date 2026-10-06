@@ -85,6 +85,15 @@ public sealed partial class RunService : IHostedService
         static StartResult Fail(int status, string title, IReadOnlyList<string>? details = null) =>
             new(null, new StartFailure(status, title, details));
 
+        // Blank optional fields (what Swagger-style forms and templates send) mean "not provided".
+        request = request with
+        {
+            RagUrl = string.IsNullOrWhiteSpace(request.RagUrl) ? null : request.RagUrl.Trim(),
+            Evaluators = request.Evaluators is { Count: > 0 } ? request.Evaluators : null,
+            Parallelism = request.Parallelism is 0 ? null : request.Parallelism,
+            BaselineRunId = string.IsNullOrWhiteSpace(request.BaselineRunId) ? null : request.BaselineRunId.Trim(),
+        };
+
         // --- dataset ---------------------------------------------------------------------------------------------
         if (!DatasetNamePattern().IsMatch(request.Dataset ?? ""))
             return Fail(400, "'dataset' is required and may contain only letters, digits, '.', '_' and '-'.");

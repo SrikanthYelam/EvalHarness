@@ -353,7 +353,7 @@ Everything except `/health` and the Swagger UI needs the `X-Api-Key` header.
 
 ### Starting a run
 
-Only `dataset` is required.
+Only `dataset` is required. Leave the other fields out, or send them blank (`""`, `[]`, `0`), to use the defaults. Placeholder text such as `"string"` is not blank and is rejected with a 400.
 
 ```bash
 curl -X POST http://localhost:8090/runs \

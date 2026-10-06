@@ -32,6 +32,7 @@ builder.Services.AddSwaggerGen(o =>
         Version = "v1",
         Description = "Start RAG evaluation runs, poll their progress and fetch reports. Runs are asynchronous: POST /runs returns 202 with a run id.",
     });
+    o.SchemaFilter<RunRequestExample>(); // pre-fill the request body with something that works as-is
     o.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
     {
         Type = SecuritySchemeType.ApiKey, In = ParameterLocation.Header, Name = ApiKeyMiddleware.HeaderName,
