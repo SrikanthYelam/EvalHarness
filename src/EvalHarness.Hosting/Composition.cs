@@ -64,7 +64,8 @@ public static class Composition
             sp.GetRequiredService<IRagClient>(),
             EvaluatorCatalog.Create(evaluation, () => sp.GetRequiredService<ILlmClient>(), () => sp.GetRequiredService<IEmbeddingClient>()),
             evaluation.MaxParallelism,
-            sp.GetRequiredService<ILogger<EvaluationRunner>>()));
+            sp.GetRequiredService<ILogger<EvaluationRunner>>(),
+            evaluation.Repeats));
 
         configure?.Invoke(services);
         return services.BuildServiceProvider();

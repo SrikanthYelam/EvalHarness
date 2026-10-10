@@ -91,6 +91,10 @@ public sealed partial class RunService : IHostedService
             RagUrl = string.IsNullOrWhiteSpace(request.RagUrl) ? null : request.RagUrl.Trim(),
             Evaluators = request.Evaluators is { Count: > 0 } ? request.Evaluators : null,
             Parallelism = request.Parallelism is 0 ? null : request.Parallelism,
+            Repeats = request.Repeats is 0 ? null : request.Repeats,
+            RequestFields = request.RequestFields?.Where(f => !string.IsNullOrWhiteSpace(f.Value)).ToDictionary(f => f.Key, f => f.Value) is { Count: > 0 } fields
+                ? fields
+                : null,
             BaselineRunId = string.IsNullOrWhiteSpace(request.BaselineRunId) ? null : request.BaselineRunId.Trim(),
         };
 
@@ -127,6 +131,30 @@ public sealed partial class RunService : IHostedService
         {
             if (parallelism is < 1 or > 32) return Fail(400, "'parallelism' must be between 1 and 32.");
             overrides["Evaluation:MaxParallelism"] = parallelism.ToString();
+        }
+
+        if (request.Repeats is { } repeats)
+        {
+            if (repeats is < 1 or > PreparedEvaluation.MaxRepeats)
+                return Fail(400, $"'repeats' must be between 1 and {PreparedEvaluation.MaxRepeats}.");
+            overrides["Evaluation:Repeats"] = repeats.ToString();
+        }
+
+        if (request.RequestFields is { } requestFields)
+        {
+            var allowedFields = _options.AllowedRequestFields.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var problems = new List<string>();
+            foreach (var (key, value) in requestFields)
+            {
+                // The allowlist's spelling is used, and a key can never contain ':' (a configuration path separator),
+                // so a request cannot reach any setting other than RagApi:RequestFields:<allowed name>.
+                var allowed = allowedFields.FirstOrDefault(a => string.Equals(a, key, StringComparison.OrdinalIgnoreCase));
+                if (allowed is null) problems.Add($"'{key}' is not an allowed request field.");
+                else if (value.Length > 64 || value.Any(char.IsControl)) problems.Add($"The value of '{key}' must be at most 64 characters with no control characters.");
+                else overrides[$"RagApi:RequestFields:{allowed}"] = value;
+            }
+            if (problems.Count > 0)
+                return Fail(400, "Invalid 'requestFields'.", [.. problems, $"Allowed: {(allowedFields.Length == 0 ? "none" : string.Join(", ", allowedFields))}."]);
         }
 
         if (request.RagUrl is { } ragUrl)

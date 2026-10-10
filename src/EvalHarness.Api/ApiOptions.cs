@@ -22,6 +22,12 @@ public sealed class ApiOptions
     /// </summary>
     public string AllowedRagUrls { get; set; } = "";
 
+    /// <summary>
+    /// Comma- or semicolon-separated names a request's requestFields may set (e.g. the RAG API's retrieval mode or topK).
+    /// Anything else is rejected, so a caller cannot rewrite arbitrary parts of the request sent to the RAG API.
+    /// </summary>
+    public string AllowedRequestFields { get; set; } = "topK,mode";
+
     /// <summary>Runs executing at once. Each run spends LLM budget and loads the RAG API, so the default is 1.</summary>
     public int MaxConcurrentRuns { get; set; } = 1;
 

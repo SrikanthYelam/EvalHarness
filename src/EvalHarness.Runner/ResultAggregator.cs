@@ -14,6 +14,8 @@ public static class ResultAggregator
         var passed = Count(TestOutcome.Passed);
         var failed = Count(TestOutcome.Failed);
 
+        // Tests where the RAG API actually responded; an empty answer there is a refusal, not an outage.
+        var answered = results.Where(r => r.Outcome != TestOutcome.ApiError).ToList();
         var latencies = results.Where(r => r.Outcome != TestOutcome.ApiError && r.LatencyMs is not null)
             .Select(r => r.LatencyMs!.Value).Order().ToList();
 
@@ -35,7 +37,9 @@ public static class ResultAggregator
             MeanExpectedSourceRank: Average(RetrievalMetric(results, "expectedSourceRank")),
             AverageLatencyMs: Average(latencies.Select(l => (double?)l)),
             P95LatencyMs: latencies.Count == 0 ? null : latencies[(int)Math.Ceiling(0.95 * latencies.Count) - 1],
-            TotalExecutionMs: totalExecutionMs);
+            TotalExecutionMs: totalExecutionMs,
+            RefusalRate: answered.Count == 0 ? null : answered.Count(r => string.IsNullOrWhiteSpace(r.Answer)) / (double)answered.Count,
+            FlakyTests: results.Count(r => r.Flaky));
     }
 
     private static IEnumerable<EvaluatorResult> Verdicts(IReadOnlyList<TestResult> results, string evaluator) =>

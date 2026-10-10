@@ -8,7 +8,7 @@ public sealed class Arguments
 {
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
-        ["run"] = ["dataset", "output", "baseline", "rag-url", "config", "parallelism", "evaluators", "wait-for-ready"],
+        ["run"] = ["dataset", "output", "baseline", "rag-url", "config", "parallelism", "evaluators", "wait-for-ready", "repeats"],
         ["compare"] = ["baseline", "current", "output", "config"],
         ["validate"] = ["dataset"],
         ["list-evaluators"] = [],

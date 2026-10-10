@@ -16,6 +16,12 @@ public sealed record RunRequest
 
     public int? Parallelism { get; init; }
 
+    /// <summary>Optional, 1 to 20: how many times each question is asked and evaluated. Results are merged per test (majority verdict, mean score), which smooths LLM-judge and generation randomness at N times the cost.</summary>
+    public int? Repeats { get; init; }
+
+    /// <summary>Optional extra fields sent to the RAG API with every question, e.g. {"mode": "Vector", "topK": "10"}. Only keys on the server's allowlist (Api:AllowedRequestFields) are accepted.</summary>
+    public IReadOnlyDictionary<string, string>? RequestFields { get; init; }
+
     /// <summary>Id of an earlier completed run to compare against for regression detection.</summary>
     public string? BaselineRunId { get; init; }
 }

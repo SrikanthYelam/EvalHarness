@@ -79,6 +79,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
     /// <summary>When false only the RAG API is faked, so the real LLM/embedding clients (and their key check) are exercised.</summary>
     public bool FakeProviders { get; set; } = true;
 
+    /// <summary>
+    /// When set, runs use the real HTTP RAG client against this handler instead of the fake, so a test can inspect
+    /// the exact request body that reaches the RAG API. Set before the first request (the host starts lazily).
+    /// </summary>
+    public HttpMessageHandler? RagHandler { get; set; }
+
     public static RagResponse GoodAnswer =>
         new("q", "18 days", "Answered", [new RetrievedChunk(1, null, "acme-handbook.md", "c1", "Chunk text", 0.9)], 25, 1);
 
@@ -109,7 +115,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(settings));
         builder.ConfigureServices(services => services.AddSingleton(new EvaluationServicesOverride(eval =>
         {
-            eval.AddSingleton<IRagClient>(new FakeRag((q, ct) => Rag(q, ct)));
+            if (RagHandler is { } handler)
+                eval.AddHttpClient("IRagClient").ConfigurePrimaryHttpMessageHandler(() => handler);
+            else
+                eval.AddSingleton<IRagClient>(new FakeRag((q, ct) => Rag(q, ct)));
             if (!FakeProviders) return;
             eval.AddSingleton<ILlmClient>(new FakeLlm((system, _) => system.Contains("grader")
                 ? $$"""{"score": {{JudgeScore}}, "explanation": "judged"}"""
@@ -400,6 +409,7 @@ public class ApiTests : IDisposable
     [Fact]
     public async Task Baseline_run_enables_regression_detection()
     {
+        _factory.Settings["Regression:AllowSingleTestVariance"] = "false"; // set before the host starts; the sample has 2 tests, so a 0.25 drop is under one test's worth
         var baseline = await RunToEnd(new { dataset = "sample" });
         _factory.JudgeScore = 4; // still passes every absolute gate, but correctness drops from 1.0 to 0.75
 
@@ -506,6 +516,116 @@ public class ApiTests : IDisposable
 
         gate.SetResult();
         await Wait(first.Id, r => r.IsFinished);
+    }
+
+    // ---- requestFields / repeats -------------------------------------------------------------------------------
+
+    private const string RagJson = """{"answer":"18 days","status":"Answered","retrievedChunks":[{"id":"c1","sourceFile":"acme-handbook.md","text":"Chunk text","score":0.9}]}""";
+
+    [Fact]
+    public async Task Request_fields_reach_the_rag_api_request_body_and_are_recorded_in_the_report()
+    {
+        var stub = new StubHandler((_, _) => Task.FromResult(StubHandler.JsonResponse(HttpStatusCode.OK, RagJson)));
+        _factory.RagHandler = stub;
+
+        var done = await RunToEnd(new { dataset = "sample", evaluators = new[] { "exact-match", "retrieval-quality" }, requestFields = new Dictionary<string, string> { ["mode"] = "Vector", ["TOPK"] = "10" } });
+
+        Assert.Equal(RunStatus.Completed, done.Status);
+        Assert.Equal(2, stub.Calls);
+        Assert.All(stub.Bodies, body =>
+        {
+            using var json = JsonDocument.Parse(body);
+            Assert.Equal("Vector", json.RootElement.GetProperty("mode").GetString());
+            Assert.Equal(10, json.RootElement.GetProperty("topK").GetInt32()); // sent as a number, in the allowlist's spelling
+            Assert.True(json.RootElement.TryGetProperty("question", out _));
+        });
+        var report = await Client.GetFromJsonAsync<EvaluationRun>($"/runs/{done.Id}/report", Json);
+        Assert.Equal(new Dictionary<string, string> { ["mode"] = "Vector", ["topK"] = "10" }, report!.Run.Settings!.RequestFields);
+    }
+
+    [Theory]
+    [InlineData("RagApi:BaseUrl")]   // a configuration path, not a request field
+    [InlineData("question")]         // would overwrite the question being asked
+    [InlineData("rerank")]           // simply not on the allowlist
+    [InlineData("")]
+    public async Task Request_fields_outside_the_allowlist_are_rejected(string key)
+    {
+        var (response, _) = await Post(new { dataset = "sample", requestFields = new Dictionary<string, string> { [key] = "x" } });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("topK", await response.Content.ReadAsStringAsync()); // tells the caller what is allowed
+    }
+
+    [Theory]
+    [InlineData("a-value-that-is-much-too-long-a-value-that-is-much-too-long-a-value-that-is-much-too-long")]
+    [InlineData("line1\nline2")]
+    public async Task Request_field_values_are_validated(string value) =>
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", requestFields = new Dictionary<string, string> { ["mode"] = value } })).Response.StatusCode);
+
+    [Fact]
+    public async Task Blank_request_field_values_mean_not_provided()
+    {
+        var done = await RunToEnd(new { dataset = "sample", requestFields = new Dictionary<string, string> { ["mode"] = "", ["topK"] = "  " } });
+        Assert.Null(done.Request.RequestFields);
+    }
+
+    [Fact]
+    public async Task The_allowed_request_fields_are_configurable()
+    {
+        _factory.Settings["Api:AllowedRequestFields"] = "rerank";
+
+        Assert.Equal(HttpStatusCode.Accepted, (await Post(new { dataset = "sample", requestFields = new Dictionary<string, string> { ["rerank"] = "true" } })).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", requestFields = new Dictionary<string, string> { ["mode"] = "Vector" } })).Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Comparing_runs_with_different_retrieval_modes_warns_that_they_are_not_like_for_like()
+    {
+        _factory.Settings["Regression:AllowSingleTestVariance"] = "true";
+        var hybrid = await RunToEnd(new { dataset = "sample", requestFields = new Dictionary<string, string> { ["mode"] = "Hybrid" } });
+
+        var vector = await RunToEnd(new { dataset = "sample", baselineRunId = hybrid.Id, requestFields = new Dictionary<string, string> { ["mode"] = "Vector" } });
+
+        var report = await Client.GetFromJsonAsync<EvaluationRun>($"/runs/{vector.Id}/report", Json);
+        Assert.Contains(report!.Regression!.Warnings, w => w.Contains("request fields") && w.Contains("mode=Hybrid") && w.Contains("mode=Vector"));
+    }
+
+    [Fact]
+    public async Task Report_records_the_judge_and_embedding_models_and_prompt_fingerprint()
+    {
+        var done = await RunToEnd(new { dataset = "sample" });
+
+        var settings = (await Client.GetFromJsonAsync<EvaluationRun>($"/runs/{done.Id}/report", Json))!.Run.Settings!;
+        Assert.Equal("OpenAI/gpt-4o-mini", settings.JudgeModel);
+        Assert.Equal("OpenAI/text-embedding-3-small", settings.EmbeddingModel);
+        Assert.Matches("^[0-9a-f]{12}$", settings.PromptsFingerprint);
+        Assert.Equal(1, settings.Repeats);
+    }
+
+    [Fact]
+    public async Task Repeats_ask_every_question_that_many_times_and_are_recorded()
+    {
+        var calls = 0;
+        _factory.Rag = (_, _) => { Interlocked.Increment(ref calls); return Task.FromResult(ApiFactory.GoodAnswer); };
+
+        var done = await RunToEnd(new { dataset = "sample", repeats = 3 });
+
+        Assert.Equal(6, calls); // 2 tests x 3 repeats
+        Assert.Equal(new RunProgress(2, 2), done.Progress); // progress counts tests, not attempts
+        var report = await Client.GetFromJsonAsync<EvaluationRun>($"/runs/{done.Id}/report", Json);
+        Assert.Equal(3, report!.Run.Settings!.Repeats);
+        Assert.All(report.Results, r => Assert.Equal(3, r.RepeatOutcomes!.Count));
+        Assert.Equal(0, report.Aggregate.FlakyTests);
+    }
+
+    [Fact]
+    public async Task Repeats_out_of_range_is_rejected_and_zero_means_not_provided()
+    {
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", repeats = 21 })).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(new { dataset = "sample", repeats = -1 })).Response.StatusCode);
+
+        var done = await RunToEnd(new { dataset = "sample", repeats = 0 });
+        Assert.Null(done.Request.Repeats);
     }
 
     // ---- queries -----------------------------------------------------------------------------------------------

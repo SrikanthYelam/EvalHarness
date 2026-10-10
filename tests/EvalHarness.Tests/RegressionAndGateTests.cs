@@ -25,7 +25,7 @@ internal static class Runs
 public class RegressionDetectorTests
 {
     private static RegressionReport Compare(AggregateMetrics baseline, AggregateMetrics current, RegressionOptions? options = null) =>
-        RegressionDetector.Compare(Runs.Run(baseline), Runs.Run(current, "run-11111111"), options ?? new RegressionOptions());
+        RegressionDetector.Compare(Runs.Run(baseline), Runs.Run(current, "run-11111111"), options ?? new RegressionOptions { AllowSingleTestVariance = false });
 
     private static MetricComparison Metric(RegressionReport r, string name) => r.Metrics.Single(m => m.Metric == name);
 

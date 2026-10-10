@@ -282,7 +282,10 @@ public class CliTests : IDisposable
         var baselinePath = _dir.File("baseline.json");
         File.Copy(_dir.File("reports/latest.json"), baselinePath);
 
-        var (exit, output, _) = await Invoke(RunArgs("--baseline", baselinePath), llm: Judge(correctnessScore: 4));
+        var strict = _dir.File("strict.json"); // the dataset has 2 tests, so a 0.25 drop is under one test's worth unless that tolerance is off
+        await File.WriteAllTextAsync(strict, """{ "Regression": { "AllowSingleTestVariance": false } }""");
+
+        var (exit, output, _) = await Invoke(RunArgs("--baseline", baselinePath, "--config", strict), llm: Judge(correctnessScore: 4));
 
         Assert.Equal(1, exit);
         Assert.Contains("REGRESSION DETECTED", output);
@@ -377,6 +380,36 @@ public class CliTests : IDisposable
         Assert.Equal(0, exit);
         Assert.InRange(rag.MaxConcurrency, 2, 2);
         Assert.Equal(2, (await LatestReport()).Run.MaxParallelism);
+    }
+
+    [Fact]
+    public async Task Repeats_option_asks_every_question_that_many_times_and_the_report_records_the_settings()
+    {
+        var rag = new FakeRag(GoodRag);
+
+        var (exit, output, _) = await Invoke(RunArgs("--repeats", "3"), ragClient: rag);
+
+        Assert.Equal(0, exit);
+        Assert.Equal(6, rag.Calls); // 2 tests x 3 repeats
+        var report = await LatestReport();
+        Assert.Equal(3, report.Run.Settings!.Repeats);
+        Assert.All(report.Results, r => Assert.Equal(3, r.RepeatOutcomes!.Count));
+        Assert.Contains("repeats 3", output);
+        Assert.Contains("Settings: judge OpenAI/gpt-4o-mini", output);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("21")]
+    public async Task Repeats_out_of_range_exits_two_before_calling_the_rag_api(string repeats)
+    {
+        var rag = new FakeRag(GoodRag);
+
+        var (exit, _, err) = await Invoke(RunArgs("--repeats", repeats), ragClient: rag);
+
+        Assert.Equal(2, exit);
+        Assert.Contains("Repeats", err);
+        Assert.Equal(0, rag.Calls);
     }
 
     [Fact]

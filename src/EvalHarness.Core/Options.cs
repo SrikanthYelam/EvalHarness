@@ -61,6 +61,12 @@ public sealed class EvaluationOptions
     /// <summary>Test cases evaluated concurrently against the RAG API.</summary>
     public int MaxParallelism { get; set; } = 4;
 
+    /// <summary>
+    /// Times each question is asked and evaluated. Results are merged per test (majority vote on the verdict, mean
+    /// score), which smooths out LLM-judge and generation randomness at the cost of N times the calls.
+    /// </summary>
+    public int Repeats { get; set; } = 1;
+
     /// <summary>K used by retrieval-quality's pass criterion and by retrieval-relevance.</summary>
     public int RetrievalK { get; set; } = 5;
 
@@ -163,6 +169,12 @@ public sealed class RegressionOptions
     public double MaxRecallAt1Drop { get; set; } = 0.05;
     public double MaxRecallAt3Drop { get; set; } = 0.05;
     public double MaxRecallAt5Drop { get; set; } = 0.05;
+
+    /// <summary>
+    /// Every rate metric is a mean over N tests, so one test flipping moves it by up to 1/N (8.3 points with 12
+    /// tests), which is indistinguishable from noise. When true, the allowed drop is never smaller than that.
+    /// </summary>
+    public bool AllowSingleTestVariance { get; set; } = true;
 
     /// <summary>Tolerated relative increase of average latency, in percent.</summary>
     public double MaxLatencyIncreasePercent { get; set; } = 25;

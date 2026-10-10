@@ -115,7 +115,9 @@ public sealed record TestResult(
     int Attempts,
     double DurationMs,
     IReadOnlyList<EvaluatorResult> EvaluatorResults,
-    string? FailureReason);
+    string? FailureReason,
+    IReadOnlyList<TestOutcome>? RepeatOutcomes = null,
+    bool Flaky = false);
 
 /// <summary>Rates and averages are null when no test contributed a value (e.g. the evaluator was disabled).</summary>
 public sealed record AggregateMetrics(
@@ -136,7 +138,30 @@ public sealed record AggregateMetrics(
     double? MeanExpectedSourceRank,
     double? AverageLatencyMs,
     double? P95LatencyMs,
-    double TotalExecutionMs);
+    double TotalExecutionMs,
+    double? RefusalRate = null,
+    int FlakyTests = 0);
+
+public sealed record EvaluatorSetting(bool Gating, double Threshold);
+
+/// <summary>
+/// Non-secret snapshot of everything that affects the numbers in a report besides the RAG system itself. Two reports
+/// are only like-for-like when these match, so regression detection compares them and warns about differences.
+/// Reports written before this existed have no snapshot.
+/// </summary>
+/// <param name="JudgeModel">"provider/model" of the LLM judge; null when no judge-based evaluator ran.</param>
+/// <param name="EmbeddingModel">"provider/model" of the embedding model; null when cosine similarity did not run.</param>
+/// <param name="PromptsFingerprint">Short hash of the judge prompts, so editing a prompt is visible.</param>
+/// <param name="RequestFields">Extra fields sent to the RAG API with every question (e.g. topK, mode).</param>
+/// <param name="Evaluators">Enabled evaluators with their gating flag and threshold.</param>
+public sealed record RunSettings(
+    string? JudgeModel,
+    string? EmbeddingModel,
+    string PromptsFingerprint,
+    int RetrievalK,
+    int Repeats,
+    IReadOnlyDictionary<string, string> RequestFields,
+    IReadOnlyDictionary<string, EvaluatorSetting> Evaluators);
 
 public sealed record RunInfo(
     string RunId,
@@ -147,7 +172,8 @@ public sealed record RunInfo(
     string HarnessVersion,
     string Target,
     int MaxParallelism,
-    IReadOnlyList<string> Evaluators);
+    IReadOnlyList<string> Evaluators,
+    RunSettings? Settings = null);
 
 public sealed record DatasetInfo(string Name, string Path, string Sha256, int TestCount);
 

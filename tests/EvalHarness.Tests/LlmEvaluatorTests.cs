@@ -107,12 +107,13 @@ public class FaithfulnessEvaluatorTests
         Assert.Equal(1.0, (await Run("""{"claims":[]}""")).Score);
 
     [Fact]
-    public async Task No_answer_text_is_vacuously_faithful_and_skips_the_judge()
+    public async Task No_answer_text_is_skipped_not_counted_as_perfectly_faithful_and_skips_the_judge()
     {
         var llm = new FakeLlm((_, _) => throw new InvalidOperationException("must not be called"));
         var result = await new FaithfulnessEvaluator(llm, 0.8).EvaluateAsync(Build.Context(response: Build.Response(null)), default);
 
-        Assert.Equal(EvaluatorStatus.Passed, result.Status);
+        Assert.Equal(EvaluatorStatus.Skipped, result.Status);
+        Assert.Null(result.Score);
         Assert.Equal(0, llm.Calls);
     }
 

@@ -24,6 +24,12 @@ public static class ConsoleReportWriter
         w.WriteLine($"EvalHarness - dataset '{run.Dataset.Name}' ({run.Dataset.TestCount} tests), run {run.Run.RunId[..8]}");
         w.WriteLine($"Target: {run.Run.Target}   Parallelism: {run.Run.MaxParallelism}   Duration: {Duration(a.TotalExecutionMs)}");
         w.WriteLine($"Evaluators: {string.Join(", ", run.Run.Evaluators)}");
+        if (run.Run.Settings is { } s)
+        {
+            var fields = s.RequestFields.Count == 0 ? "none" : string.Join(", ", s.RequestFields.Select(f => $"{f.Key}={f.Value}"));
+            w.WriteLine($"Settings: judge {s.JudgeModel ?? "n/a"} | embeddings {s.EmbeddingModel ?? "n/a"} | prompts {s.PromptsFingerprint} | " +
+                        $"repeats {s.Repeats} | retrieval K {s.RetrievalK} | request fields {fields}");
+        }
         w.WriteLine();
         w.WriteLine($"OVERALL: {Verdict(exit)} (exit code {exit})");
         if (run.Run.Cancelled) w.WriteLine("The run was cancelled; results cover only the tests that completed.");
@@ -38,6 +44,8 @@ public static class ConsoleReportWriter
         Row(w, "Cosine similarity (avg)", Num(a.AverageCosineSimilarity));
         Row(w, "Exact match rate", Num(a.ExactMatchRate));
         Row(w, "Retrieval relevance", Num(a.RetrievalRelevance));
+        Row(w, "Refusal rate (no answer text)", Pct(a.RefusalRate));
+        if (a.FlakyTests > 0) Row(w, "Flaky tests (repeats disagreed)", a.FlakyTests.ToString(CultureInfo.InvariantCulture));
         Row(w, "Recall@1 / @3 / @5", $"{Num(a.RecallAt1)} / {Num(a.RecallAt3)} / {Num(a.RecallAt5)}");
         Row(w, "Mean expected source rank", Num(a.MeanExpectedSourceRank));
         Row(w, "Latency avg / p95", $"{Ms(a.AverageLatencyMs)} / {Ms(a.P95LatencyMs)}");
@@ -56,7 +64,7 @@ public static class ConsoleReportWriter
         w.WriteLine();
         w.WriteLine("Tests");
         foreach (var r in run.Results)
-            w.WriteLine($"  [{Label(r.Outcome),-9}] {r.Id,-22} {Scores(r)}");
+            w.WriteLine($"  [{Label(r.Outcome),-9}] {r.Id,-22} {Scores(r)}{(r.Flaky ? $"  ~FLAKY ({string.Join("/", r.RepeatOutcomes ?? [])})" : "")}");
 
         var problems = run.Results.Where(r => r.Outcome != TestOutcome.Passed).ToList();
         if (problems.Count > 0)

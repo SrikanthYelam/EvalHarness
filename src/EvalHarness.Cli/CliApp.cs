@@ -20,7 +20,8 @@ public static class CliApp
 
         Usage:
           EvalHarness run --dataset <file> [--output <dir>] [--baseline <report.json>] [--rag-url <url>]
-                          [--parallelism <n>] [--evaluators <a,b,...>] [--wait-for-ready <seconds>] [--config <file>]
+                          [--parallelism <n>] [--repeats <n>] [--evaluators <a,b,...>] [--wait-for-ready <seconds>]
+                          [--config <file>]
               Run the dataset against the RAG API, write a JSON report, print a console report, apply quality gates
               and (with --baseline, or the Baseline setting / EVALHARNESS_Baseline) regression checks.
           EvalHarness compare --baseline <report.json> --current <report.json> [--output <file>] [--config <file>]
@@ -81,6 +82,7 @@ public static class CliApp
         if (args.Get("rag-url") is { } url) overrides["RagApi:BaseUrl"] = url;
         if (args.Get("wait-for-ready") is { } wait) overrides["RagApi:WaitForReadySeconds"] = wait;
         if (args.Get("parallelism") is { } parallelism) overrides["Evaluation:MaxParallelism"] = parallelism;
+        if (args.Get("repeats") is { } repeats) overrides["Evaluation:Repeats"] = repeats;
         if (args.Get("evaluators") is { } list)
         {
             var selected = list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

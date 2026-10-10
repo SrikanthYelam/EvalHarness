@@ -14,7 +14,8 @@ public sealed class EvaluationRunner(
     IRagClient rag,
     IReadOnlyList<ConfiguredEvaluator> evaluators,
     int maxParallelism,
-    ILogger<EvaluationRunner>? logger = null)
+    ILogger<EvaluationRunner>? logger = null,
+    int repeats = 1)
 {
     /// <param name="onTestCompleted">Called (possibly concurrently) as each test finishes; used for progress reporting.</param>
     public async Task<EvaluationRun> RunAsync(
@@ -35,7 +36,7 @@ public sealed class EvaluationRunner(
                 new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, maxParallelism), CancellationToken = cancellationToken },
                 async (index, ct) =>
                 {
-                    var result = await RunTestAsync(dataset.TestCases[index], ct);
+                    var result = await RunRepeatedAsync(dataset.TestCases[index], ct);
                     slots[index] = result;
                     onTestCompleted?.Invoke(result);
                 });
@@ -58,6 +59,15 @@ public sealed class EvaluationRunner(
             new DatasetInfo(dataset.Name, dataset.Path, dataset.Sha256, dataset.TestCases.Count),
             ResultAggregator.Aggregate(results, elapsed),
             results);
+    }
+
+    /// <summary>Runs one test <c>repeats</c> times, one after another, and merges the attempts into a single result.</summary>
+    private async Task<TestResult> RunRepeatedAsync(TestCase test, CancellationToken ct)
+    {
+        var attempts = new List<TestResult>(Math.Max(1, repeats));
+        for (var i = 0; i < Math.Max(1, repeats); i++)
+            attempts.Add(await RunTestAsync(test, ct));
+        return TestResultMerger.Merge(attempts);
     }
 
     private async Task<TestResult> RunTestAsync(TestCase test, CancellationToken ct)
@@ -84,25 +94,7 @@ public sealed class EvaluationRunner(
                                              test.Evaluators.Contains(e.Evaluator.Name, StringComparer.OrdinalIgnoreCase));
         var evaluatorResults = await Task.WhenAll(selected.Select(e => RunEvaluatorAsync(e, context, ct)));
 
-        var failed = evaluatorResults.Where(r => r is { Gating: true, Status: EvaluatorStatus.Failed }).ToList();
-        var errored = evaluatorResults.Where(r => r.Status == EvaluatorStatus.Error).ToList();
-
-        TestOutcome outcome;
-        string? reason = null;
-        if (failed.Count > 0)
-        {
-            outcome = TestOutcome.Failed;
-            reason = string.Join("; ", failed.Select(r => $"{r.Evaluator}: {r.Explanation}"));
-        }
-        else if (errored.Count > 0)
-        {
-            outcome = TestOutcome.EvaluatorError;
-            reason = string.Join("; ", errored.Select(r => $"{r.Evaluator}: {r.Error}"));
-        }
-        else
-        {
-            outcome = TestOutcome.Passed;
-        }
+        var (outcome, reason) = OutcomeClassifier.Classify(evaluatorResults);
 
         logger?.LogInformation("{TestId}: {Outcome} ({LatencyMs:0}ms)", test.Id, outcome, response.LatencyMs);
         return Result(test, outcome, response, evaluatorResults, stopwatch, reason);
