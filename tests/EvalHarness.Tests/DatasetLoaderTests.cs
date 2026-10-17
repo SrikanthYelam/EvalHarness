@@ -27,6 +27,27 @@ public class DatasetLoaderTests
     }
 
     [Fact]
+    public void Refusal_test_needs_neither_expected_answer_nor_sources()
+    {
+        var ds = Parse("""
+            { "testCases": [ { "id": "r", "category": "c", "difficulty": "easy", "question": "Q?", "expectRefusal": true } ] }
+            """);
+
+        Assert.True(Assert.Single(ds.TestCases).ExpectRefusal);
+    }
+
+    [Fact]
+    public void Refusal_test_cannot_pick_evaluators()
+    {
+        var errors = Errors("""
+            { "testCases": [ { "id": "r", "category": "c", "difficulty": "easy", "question": "Q?", "expectRefusal": true,
+                               "evaluators": ["exact-match"] } ] }
+            """);
+
+        Assert.Contains("expectRefusal", Assert.Single(errors));
+    }
+
+    [Fact]
     public void Name_defaults_to_file_name()
     {
         Assert.Equal("ds", Parse($$"""{ "testCases": [ {{ValidCase}} ] }""").Name);

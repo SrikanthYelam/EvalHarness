@@ -27,6 +27,16 @@ public class RunnerTests
     }
 
     [Fact]
+    public async Task Refusal_test_is_judged_by_answer_correctness_alone()
+    {
+        var test = Build.Case() with { ExpectRefusal = true };
+
+        var run = await Run(Healthy(), [Build.Passing(EvaluatorNames.AnswerCorrectness), Build.Passing("other")], Build.Dataset(test));
+
+        Assert.Equal(EvaluatorNames.AnswerCorrectness, Assert.Single(run.Results[0].EvaluatorResults).Evaluator);
+    }
+
+    [Fact]
     public async Task Failing_gating_evaluator_fails_the_test_with_a_reason()
     {
         var run = await Run(Healthy(), [Build.Passing("ok"), Build.Failing("bad")], Build.Dataset(Build.Case()));

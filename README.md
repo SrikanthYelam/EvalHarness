@@ -114,11 +114,29 @@ A dataset is a JSON file. Nothing is hard-coded in C#.
 | `question` | yes | Sent to the RAG API. |
 | `expectedAnswer` | yes | Ground truth for exact match, cosine and the correctness judge. |
 | `expectedSources` | yes, at least one | What retrieval should surface (below). |
-| `evaluators` | no | Restrict this test to the named evaluators. Omitted means all enabled ones. |
+| `evaluators` | no | Restrict this test to the named evaluators. Omitted means all enabled ones. Not allowed with `expectRefusal`. |
+| `expectRefusal` | no | `true` for a question the documents do **not** answer. The RAG API should decline. `expectedAnswer` and `expectedSources` are then optional, and the test is judged by `answer-correctness` alone: it passes only if no answer text comes back (no judge call is made). |
 
 Each `expectedSources` entry needs at least one of `documentId`, `documentName`, `chunkId`, `chunkContains`. **Every field you set must match** the same retrieved chunk. `documentName` ignores directories and case (`docs/Handbook.md` matches `handbook.md`). Prefer `documentName` + `chunkContains` when chunk ids change between ingestions.
 
 `validate` (and `run`, before it calls anything) rejects: invalid JSON, misspelled or unknown fields, missing required fields, duplicate ids, unknown difficulty, expected sources with no identifier, and unknown evaluator names. All problems are listed at once.
+
+### Sample datasets
+
+| Dataset | Documents to ingest | What it covers |
+| --- | --- | --- |
+| `acme-handbook` | `samples/acme-handbook.md` | Small and easy: 12 questions over a short markdown file. Too small to tell chunking strategies apart. |
+| `acme-hard` | `samples/acme-travel-policy.pdf`, `samples/acme-engineering-runbook.md` | 25 questions. A 3-page PDF with facts that straddle page breaks, a markdown runbook with tables and a code block, multi-source questions, and four `expectRefusal` questions the documents don't answer. |
+
+**What `acme-hard` found about DocRAG** (full write-up in the DocRAG README, "Evaluation findings"; temperature-0 results were identical across repeats):
+
+| DocRAG setting | Pass rate | Recall@1 | Note |
+| --- | --- | --- | --- |
+| 400-token chunks, similarity gate 0.30 | 81.0% | 0.905 | Two page-break questions failed until the chunker carried text across PDF pages. One question was dropped by the gate (similarity 0.28). |
+| 200-token chunks, gate 0.30 | 85.7% | 0.762 | Fixed the gated question but ranked the right chunk first less often, so it was not kept. |
+| 400-token chunks, gate 0.25 | 85.7% | 0.905 | Best result; all four refusal tests still pass. With them, 22 of 25 (88.0%). |
+
+Small datasets move in steps of one question (4 to 5 points here), so compare settings with `--repeats` and the same dataset.
 
 ## Evaluators
 
@@ -592,7 +610,7 @@ dotnet test
 - **Single provider shipped**: OpenAI and OpenAI-compatible endpoints (set `BaseUrl`). Others need an `ILlmClient`/`IEmbeddingClient`.
 - **Judge variance**: LLM judges are noisy even at temperature 0, and a judge model change shifts scores. Use `Repeats` to average the noise down, rely on the one-test tolerance, and pin the judge model. Reports record the judge model and prompt fingerprint, so a change is flagged in regression warnings, but re-baseline when you change them. The judge itself is not yet calibrated against human-labelled answers.
 - **Prompt injection**: judge inputs are JSON-encoded so hostile text cannot break out of its field, which closes structural attacks but cannot make a language model immune to persuasion in the text it is grading.
-- **Questions the RAG should decline** (no answer in the documents) are not modelled yet: every test needs an expected answer and source.
+- **Questions the RAG should decline** are modelled with `expectRefusal`, but only as a pass/fail on "no answer text". A refusal test is not checked for *why* the API declined, and the aggregate `refusalRate` counts expected refusals too, so read it together with the refusal tests rather than as a defect rate.
 - **Single-turn Q&A** over a request/response HTTP API; no streaming or multi-turn conversations.
 - Retrieved chunks are scored in the order the API returns them; the harness cannot know the API's internal ranking beyond that.
 - The default readiness probe is a plain GET of `ReadinessPath`; any non-5xx response counts as ready.

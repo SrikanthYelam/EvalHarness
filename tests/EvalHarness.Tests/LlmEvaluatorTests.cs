@@ -49,6 +49,22 @@ public class AnswerCorrectnessEvaluatorTests
     public async Task Unusable_judge_output_throws_instead_of_blaming_the_answer(string judgeJson) =>
         await Assert.ThrowsAsync<JudgeResponseException>(() => Run(judgeJson));
 
+    [Theory]
+    [InlineData(null, EvaluatorStatus.Passed)]
+    [InlineData("  ", EvaluatorStatus.Passed)]
+    [InlineData("18 days", EvaluatorStatus.Failed)]
+    public async Task Refusal_test_passes_only_when_the_api_declines_and_never_calls_the_judge(string? answer, EvaluatorStatus status)
+    {
+        var llm = new FakeLlm((_, _) => throw new InvalidOperationException("must not be called"));
+        var test = Build.Case() with { ExpectRefusal = true };
+
+        var result = await new AnswerCorrectnessEvaluator(llm, 0.75)
+            .EvaluateAsync(Build.Context(test, Build.Response(answer)), default);
+
+        Assert.Equal(status, result.Status);
+        Assert.Equal(0, llm.Calls);
+    }
+
     [Fact]
     public async Task Missing_answer_fails_without_calling_the_judge()
     {

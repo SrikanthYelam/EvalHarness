@@ -36,6 +36,12 @@ public sealed record TestCase
     public string ExpectedAnswer { get; init; } = "";
     public IReadOnlyList<ExpectedSource> ExpectedSources { get; init; } = [];
 
+    /// <summary>
+    /// The documents do not contain the answer, so the RAG API should decline. The test then needs no expected
+    /// answer or sources and is judged by answer-correctness alone: it passes only if no answer text comes back.
+    /// </summary>
+    public bool ExpectRefusal { get; init; }
+
     /// <summary>Optional: restrict this test to the named evaluators. Null runs every enabled evaluator.</summary>
     public IReadOnlyList<string>? Evaluators { get; init; }
 }

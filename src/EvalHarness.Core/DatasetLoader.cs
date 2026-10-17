@@ -94,13 +94,18 @@ public static class DatasetLoader
 
             if (string.IsNullOrWhiteSpace(tc.Category)) errors.Add($"{label}: 'category' is required.");
             if (string.IsNullOrWhiteSpace(tc.Question)) errors.Add($"{label}: 'question' is required.");
-            if (string.IsNullOrWhiteSpace(tc.ExpectedAnswer)) errors.Add($"{label}: 'expectedAnswer' is required.");
+            if (!tc.ExpectRefusal && string.IsNullOrWhiteSpace(tc.ExpectedAnswer)) errors.Add($"{label}: 'expectedAnswer' is required.");
 
             if (string.IsNullOrWhiteSpace(tc.Difficulty)) errors.Add($"{label}: 'difficulty' is required.");
             else if (!Difficulties.Contains(tc.Difficulty, StringComparer.OrdinalIgnoreCase))
                 errors.Add($"{label}: 'difficulty' must be one of {string.Join(", ", Difficulties)} (was '{tc.Difficulty}').");
 
-            if (tc.ExpectedSources is null || tc.ExpectedSources.Count == 0)
+            if (tc.ExpectRefusal)
+            {
+                if (tc.Evaluators is not null)
+                    errors.Add($"{label}: 'evaluators' cannot be combined with 'expectRefusal'; such a test is judged by answer-correctness alone.");
+            }
+            else if (tc.ExpectedSources is null || tc.ExpectedSources.Count == 0)
                 errors.Add($"{label}: 'expectedSources' needs at least one entry.");
             else
                 for (var s = 0; s < tc.ExpectedSources.Count; s++)

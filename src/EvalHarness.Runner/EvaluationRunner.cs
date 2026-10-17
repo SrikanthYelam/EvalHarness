@@ -90,8 +90,9 @@ public sealed class EvaluationRunner(
         }
 
         var context = new EvaluationContext(test, response);
-        var selected = evaluators.Where(e => test.Evaluators is null ||
-                                             test.Evaluators.Contains(e.Evaluator.Name, StringComparer.OrdinalIgnoreCase));
+        var selected = evaluators.Where(e => test.ExpectRefusal
+            ? e.Evaluator.Name == EvaluatorNames.AnswerCorrectness
+            : test.Evaluators is null || test.Evaluators.Contains(e.Evaluator.Name, StringComparer.OrdinalIgnoreCase));
         var evaluatorResults = await Task.WhenAll(selected.Select(e => RunEvaluatorAsync(e, context, ct)));
 
         var (outcome, reason) = OutcomeClassifier.Classify(evaluatorResults);

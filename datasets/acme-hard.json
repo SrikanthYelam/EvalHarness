@@ -1,0 +1,315 @@
+{
+  "name": "acme-hard",
+  "description": "Harder questions over samples/acme-travel-policy.pdf (facts that straddle PDF page breaks) and samples/acme-engineering-runbook.md (tables and a code block). Ingest both files into the RAG API under test before running. The pdf-page-break cases cannot pass if chunking cuts at page boundaries. The four refusal tests (expectRefusal) are questions the documents do not answer; the RAG API should decline them, which guards against a similarity gate set too low.",
+  "testCases": [
+    {
+      "id": "pdf-late-loss-report",
+      "category": "pdf-page-break",
+      "difficulty": "hard",
+      "question": "What happens if I report a lost company laptop late?",
+      "expectedAnswer": "A late report may lead to disciplinary action, and the employee may be asked to cover the replacement cost of the device when negligence is established.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "A loss that is reported late may lead to disciplinary action"
+        }
+      ]
+    },
+    {
+      "id": "pdf-per-diem-coverage",
+      "category": "pdf-page-break",
+      "difficulty": "hard",
+      "question": "Does the daily meal allowance cover coffee and bottled water, and is alcohol reimbursed?",
+      "expectedAnswer": "Yes, the flat per diem covers small incidentals such as coffee and bottled water. Alcohol is never reimbursed.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "such as coffee and bottled water"
+        }
+      ]
+    },
+    {
+      "id": "pdf-first-day-per-diem",
+      "category": "pdf-multi-source",
+      "difficulty": "hard",
+      "question": "How much per diem do I receive on the first day of a trip?",
+      "expectedAnswer": "75 percent of the $75 daily per diem, which is $56.25.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "flat per diem of $75 per day"
+        },
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "reduced to 75 percent"
+        }
+      ]
+    },
+    {
+      "id": "pdf-loss-report-window",
+      "category": "pdf-single-page",
+      "difficulty": "medium",
+      "question": "How quickly must I report a stolen company laptop?",
+      "expectedAnswer": "Within 4 hours of discovering the loss, by phone or through the incident portal.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "within 4 hours of the moment the loss is discovered"
+        }
+      ]
+    },
+    {
+      "id": "pdf-device-wipe",
+      "category": "pdf-single-page",
+      "difficulty": "medium",
+      "question": "When is a lost company device remotely wiped?",
+      "expectedAnswer": "It is locked immediately and wiped after 24 hours if it has not been recovered.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "wipes it after 24 hours"
+        }
+      ]
+    },
+    {
+      "id": "pdf-intl-approval",
+      "category": "pdf-single-page",
+      "difficulty": "medium",
+      "question": "How far in advance do I need approval for international travel, and from whom?",
+      "expectedAnswer": "Written approval from a director at least 10 business days before departure.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "at least 10 business days before departure"
+        }
+      ]
+    },
+    {
+      "id": "pdf-hotel-london",
+      "category": "pdf-single-page",
+      "difficulty": "medium",
+      "question": "What is the maximum hotel rate per night in London?",
+      "expectedAnswer": "$220 per night, because London is a Tier 1 city.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "$220 per night in Tier 1 cities"
+        }
+      ]
+    },
+    {
+      "id": "pdf-extended-stay",
+      "category": "pdf-single-page",
+      "difficulty": "hard",
+      "question": "I will be in Chicago for three weeks. Do the nightly hotel limits apply?",
+      "expectedAnswer": "No. Stays longer than 14 consecutive nights should be arranged as corporate housing through the travel agency, which negotiates a monthly rate.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "Stays longer than 14 consecutive nights"
+        }
+      ]
+    },
+    {
+      "id": "pdf-late-expense-report",
+      "category": "pdf-single-page",
+      "difficulty": "medium",
+      "question": "I submitted my expense report 75 days after the trip. Will it be paid?",
+      "expectedAnswer": "No. Reports submitted after 60 days are returned unpaid and can only be reopened with approval from the finance director.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "Reports submitted after 60 days are returned unpaid"
+        }
+      ]
+    },
+    {
+      "id": "pdf-business-class",
+      "category": "pdf-single-page",
+      "difficulty": "medium",
+      "question": "Can I fly business class on an 8-hour flight?",
+      "expectedAnswer": "Only if a vice president has approved it in advance; otherwise premium economy is the highest permitted class for flights of six hours or longer.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "business class is permitted only when a vice president has approved"
+        }
+      ]
+    },
+    {
+      "id": "md-sev2-response",
+      "category": "md-table",
+      "difficulty": "medium",
+      "question": "What is the first-response time for a SEV2 incident?",
+      "expectedAnswer": "15 minutes, with updates every 30 minutes.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "Major feature unavailable or severe degradation"
+        }
+      ]
+    },
+    {
+      "id": "md-sev1-review",
+      "category": "md-prose",
+      "difficulty": "easy",
+      "question": "How soon must the post-incident review for a SEV1 be written?",
+      "expectedAnswer": "Within 5 business days.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "within 5 business days"
+        }
+      ]
+    },
+    {
+      "id": "md-canary-promotion",
+      "category": "md-prose",
+      "difficulty": "hard",
+      "question": "What conditions must hold before a canary release is promoted to 100 percent?",
+      "expectedAnswer": "The error rate must stay below 1 percent and the p95 latency must stay under 400 milliseconds through the 5 percent and 50 percent stages.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "error rate stays below 1 percent"
+        }
+      ]
+    },
+    {
+      "id": "md-rollback-command",
+      "category": "md-code-block",
+      "difficulty": "medium",
+      "question": "What command rolls a service back to the previous revision in production?",
+      "expectedAnswer": "deploy rollback --service $SERVICE --env production --to previous",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "deploy rollback --service"
+        }
+      ]
+    },
+    {
+      "id": "md-rollback-verify",
+      "category": "md-code-block",
+      "difficulty": "hard",
+      "question": "After a manual rollback, how do I confirm that it finished?",
+      "expectedAnswer": "Run deploy status --service $SERVICE --env production --wait.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "deploy status --service"
+        }
+      ]
+    },
+    {
+      "id": "md-billing-owner",
+      "category": "md-table",
+      "difficulty": "medium",
+      "question": "Which team owns the billing service and what datastore does it use?",
+      "expectedAnswer": "The Payments team owns billing, and it uses PostgreSQL.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "billing | Payments"
+        }
+      ]
+    },
+    {
+      "id": "md-checkout-availability",
+      "category": "md-multi-source",
+      "difficulty": "hard",
+      "question": "What monthly availability target applies to the checkout service?",
+      "expectedAnswer": "99.95 percent, because checkout is a tier 1 service.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "checkout | Payments"
+        },
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "Tier 1 services have a 99.95 percent"
+        }
+      ]
+    },
+    {
+      "id": "md-backup-retention",
+      "category": "md-prose",
+      "difficulty": "easy",
+      "question": "How long are full PostgreSQL backups kept before moving to cold storage?",
+      "expectedAnswer": "35 days.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "kept for 35 days"
+        }
+      ]
+    },
+    {
+      "id": "md-friday-release",
+      "category": "md-prose",
+      "difficulty": "easy",
+      "question": "Can we ship a release on a Friday?",
+      "expectedAnswer": "No. Nothing ships on Friday; releases go out on Tuesdays and Thursdays at 10:00 UTC.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "Nothing ships on Friday"
+        }
+      ]
+    },
+    {
+      "id": "md-drop-column",
+      "category": "md-prose",
+      "difficulty": "hard",
+      "question": "What is the safe way to remove a column from a table?",
+      "expectedAnswer": "Dropping a column takes two releases: the first stops reading it, the second removes it.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "Dropping a column or table takes two releases"
+        }
+      ]
+    },
+    {
+      "id": "md-rollback-migration",
+      "category": "md-prose",
+      "difficulty": "hard",
+      "question": "Can I roll back a release that included a database migration?",
+      "expectedAnswer": "Not without asking the database on-call first, because the previous version may not be able to read the migrated schema.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "Never roll back a release that included a database migration"
+        }
+      ]
+    },
+    {
+      "id": "refuse-unrelated",
+      "category": "refusal",
+      "difficulty": "easy",
+      "question": "What is the capital of France?",
+      "expectRefusal": true
+    },
+    {
+      "id": "refuse-wifi-password",
+      "category": "refusal",
+      "difficulty": "easy",
+      "question": "What is the Wi-Fi password for the Acme headquarters?",
+      "expectRefusal": true
+    },
+    {
+      "id": "refuse-ceo-salary",
+      "category": "refusal",
+      "difficulty": "medium",
+      "question": "What is the CEO's salary at Acme?",
+      "expectRefusal": true
+    },
+    {
+      "id": "refuse-oncall-pay",
+      "category": "refusal",
+      "difficulty": "hard",
+      "question": "How much extra pay does an engineer get for being on call during a SEV1 incident?",
+      "expectRefusal": true
+    }
+  ]
+}

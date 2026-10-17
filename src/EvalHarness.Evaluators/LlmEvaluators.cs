@@ -107,6 +107,14 @@ public sealed class AnswerCorrectnessEvaluator(ILlmClient llm, double threshold)
     public async Task<EvaluatorResult> EvaluateAsync(EvaluationContext context, CancellationToken cancellationToken)
     {
         var answer = context.Response.Answer;
+        if (context.TestCase.ExpectRefusal)
+        {
+            var declined = string.IsNullOrWhiteSpace(answer);
+            return EvaluatorResult.Of(Name, declined, declined ? 1 : 0, declined
+                ? "The RAG API declined, as expected."
+                : "The RAG API answered a question the documents do not cover; it should have declined.");
+        }
+
         if (string.IsNullOrWhiteSpace(answer))
             return EvaluatorResult.Of(Name, false, 0,
                 $"The RAG API returned no answer (status: {context.Response.Status ?? "n/a"}) but one was expected.");
