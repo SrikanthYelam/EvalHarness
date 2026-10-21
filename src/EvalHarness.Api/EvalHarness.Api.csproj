@@ -3,6 +3,9 @@
   <PropertyGroup>
     <AssemblyName>EvalHarness.Api</AssemblyName>
     <RootNamespace>EvalHarness.Api</RootNamespace>
+    <!-- The Web SDK starts `dotnet run` in this project folder. Relative paths in the settings (datasets, data) are meant to
+         be relative to the repository root, like the CLI, so start there instead. Docker uses absolute paths and ignores this. -->
+    <RunWorkingDirectory>$(MSBuildProjectDirectory)/../..</RunWorkingDirectory>
   </PropertyGroup>
 
   <ItemGroup>

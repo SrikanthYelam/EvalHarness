@@ -26,6 +26,7 @@
     <ProjectReference Include="..\..\src\EvalHarness.Hosting\EvalHarness.Hosting.csproj" />
     <ProjectReference Include="..\..\src\EvalHarness.Cli\EvalHarness.Cli.csproj" />
     <ProjectReference Include="..\..\src\EvalHarness.Api\EvalHarness.Api.csproj" />
+    <ProjectReference Include="..\..\src\EvalHarness.Mcp\EvalHarness.Mcp.csproj" />
   </ItemGroup>
 
 </Project>

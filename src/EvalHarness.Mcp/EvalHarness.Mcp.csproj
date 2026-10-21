@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>EvalHarness.Mcp</AssemblyName>
+    <RootNamespace>EvalHarness.Mcp</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="ModelContextProtocol" Version="2.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EvalHarness.Core\EvalHarness.Core.csproj" />
+    <ProjectReference Include="..\EvalHarness.Runner\EvalHarness.Runner.csproj" />
+  </ItemGroup>
+
+</Project>

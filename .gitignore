@@ -12,3 +12,6 @@ TestResults/
 
 # Generated reports (promote one to baselines/ to use it as a baseline)
 reports/
+
+# API run history when started with `dotnet run` from the repository root
+data/

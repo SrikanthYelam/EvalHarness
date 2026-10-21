@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "evalharness": {
+      "command": "dotnet",
+      "args": ["run", "--project", "src/EvalHarness.Mcp", "-c", "Release", "--no-build"],
+      "env": {
+        "EVALHARNESS_URL": "${EVALHARNESS_URL:-http://localhost:8090}",
+        "EVALHARNESS_API_KEY": "${EVALHARNESS_API_KEY}"
+      }
+    }
+  }
+}

@@ -31,6 +31,7 @@ EvalHarness works with any API that takes a question and returns an answer plus 
 - [Configuration](#configuration)
 - [API service](#api-service)
 - [Docker](#docker)
+- [Using EvalHarness from an AI assistant](#using-evalharness-from-an-ai-assistant)
 - [CI/CD](#cicd)
 - [Adding a new evaluator](#adding-a-new-evaluator)
 - [Architecture](#architecture)
@@ -390,6 +391,8 @@ dotnet run --project src/EvalHarness.Api --urls http://localhost:8090
 
 Swagger UI is at `http://localhost:8090/swagger` (use *Authorize* to enter the key). With Docker, see [Docker](#docker).
 
+Run it from the repository root: with `dotnet run`, the relative defaults `Api:DatasetsDirectory` (`datasets`) and `Api:DataDirectory` (`data`, git-ignored) resolve against the repository root, the same as for the CLI. Any other way of starting it resolves them against the current directory, so use absolute paths there (the Docker image sets `/datasets` and `/data`).
+
 ### Endpoints
 
 Everything except `/health` and the Swagger UI needs the `X-Api-Key` header.
@@ -521,6 +524,67 @@ For a RAG API that needs auth, add `EVALHARNESS_RagApi__Headers__Authorization` 
 docker build --target test .
 ```
 
+## Using EvalHarness from an AI assistant
+
+The repository includes the pieces to let an AI coding assistant (Claude Code) run and interpret evaluations as part of a
+development loop: change the RAG system, run the evaluation, read the result, decide what to fix.
+
+| Piece | Where | What it is |
+| --- | --- | --- |
+| **MCP server** | `src/EvalHarness.Mcp`, registered in `.mcp.json` | Six tools over the EvalHarness API: `list_datasets`, `start_run`, `get_run`, `get_summary`, `compare_runs`, `cancel_run`. |
+| **Skills** | `.claude/skills/` | `run-eval` (run and triage a result), `add-evaluator` (the checklist that keeps reports comparable), `add-test-case` (add dataset cases with stable expected sources). |
+| **Project memory** | `CLAUDE.md` | Architecture, commands, the design rules that must keep holding, test conventions, gotchas and known gaps. |
+
+### Set it up
+
+```bash
+docker compose up -d --build                      # the EvalHarness API (see Docker above), with EVAL_API_KEY set in .env
+dotnet build src/EvalHarness.Mcp -c Release       # .mcp.json starts the built server with --no-build
+export EVALHARNESS_API_KEY=<the same value as EVAL_API_KEY>
+export EVALHARNESS_URL=http://localhost:8090      # optional; this is the default
+```
+
+Open Claude Code in the repository root and approve the `evalharness` server when prompted (`/mcp` shows its status). The
+server reads `EVALHARNESS_URL` and `EVALHARNESS_API_KEY` from the environment it starts in. The key is never written to a
+file, logged, or included in a tool result, and the server warns on stderr if the URL is plain `http://` for a non-local host.
+
+### The tools
+
+| Tool | What it does |
+| --- | --- |
+| `list_datasets` | Dataset names the server can run. |
+| `start_run` | Starts a run and returns at once with a run id. Accepts the same options as `POST /runs`: `ragUrl` (allowlisted), `evaluators`, `parallelism`, `repeats`, `requestFields` (for example `{"mode": "Vector"}`), `baselineRunId`. It spends LLM budget, and its description says so. |
+| `get_run` | Status and progress. `waitSeconds` (up to 120) waits for the run to finish so the assistant does not have to poll. |
+| `get_summary` | The verdict (`passed`, `outcome`, `exitCode`), headline metrics, run settings, quality gates, the regression comparison if there was a baseline, and up to 20 problem tests. Each problem has a **`likelyCause`** (`retrieval-miss`, `refused-despite-retrieval`, `unsupported-claims`, `wrong-answer-despite-retrieval`, `rag-api-error`, `evaluator-error`) derived from the evaluator results, the question, expected and actual answer, evaluator scores, and the top retrieved sources by document name and rank. |
+| `compare_runs` | Compares two finished runs: regressed metrics, tests that flipped, and warnings when the runs are not like-for-like (judge model, prompts, thresholds, request fields, repeats, dataset). Uses the default regression tolerances. |
+| `cancel_run` | Stops a queued or running run. |
+
+Design choices worth knowing:
+
+- **Summaries, not reports.** A full report carries every retrieved chunk's text, which is large and can contain personal data.
+  `get_summary` leaves it out (a typical summary is about 1 to 2 thousand characters) and keeps what triage needs: ranks,
+  document names, scores and reasons. The full report is still available from the API for a human.
+- **Errors the model can act on.** The API's validation messages are passed through, so a rejected request tells the model what
+  is allowed: `Invalid 'requestFields'. (HTTP 400) 'rerank' is not an allowed request field. Allowed: topK, mode.` Run ids are
+  checked before they become part of a URL. A missing key, an unreachable server or an unexpected response each get their own message.
+- **No new powers.** The tools call the same authenticated API, so the `ragUrl` and `requestFields` allowlists, the concurrency
+  limit and the API key all still apply. The server only observes the RAG system; none of the tools can change it.
+
+### An example conversation
+
+> **You:** I changed the chunk size in the RAG service. Did retrieval get worse?
+>
+> **Assistant** (using the `run-eval` skill): starts `acme-handbook` with `repeats: 3` against the last known-good run as
+> baseline, waits, then reports: the verdict, which metrics moved, which tests flipped and their `likelyCause`, any warning that
+> the settings differ, and what it could not verify.
+
+### Development workflow
+
+The skills encode the procedures used to build this project, so an assistant working in the repository follows the same
+habits: build from the solution root; write the test, then break the code on purpose to see it fail; run the suite repeatedly
+after concurrency changes; keep reports additive and comparable; treat judge inputs as untrusted. `CLAUDE.md` lists them with
+the reasons.
+
 ## CI/CD
 
 The exit code is the contract. A GitHub Actions job against a staging RAG API:
@@ -591,10 +655,13 @@ src/
                            shared by the CLI and the API
   EvalHarness.Cli          Argument parsing, configuration, commands, exit codes
   EvalHarness.Api          ASP.NET Core service: API-key auth, run queue, file-based history, ragUrl allowlist
+  EvalHarness.Mcp          MCP server (stdio) exposing the API as tools for AI assistants
 tests/EvalHarness.Tests    Unit + integration tests; all fakes, no network, no real LLM
 datasets/                  Evaluation datasets (JSON)
 samples/                   Source document(s) the sample dataset asks about; ingest into the RAG API under test
 baselines/                 Baseline reports to compare against (create it when you save your first one)
+.claude/skills/            Skills for AI assistants: run-eval, add-evaluator, add-test-case
+.mcp.json  CLAUDE.md       MCP server registration, and project memory for AI assistants
 reports/                   Generated reports (git-ignored)
 ```
 
@@ -606,6 +673,7 @@ dotnet test
 
 ## Limitations
 
+- **MCP server scope**: stdio only, started on the developer's machine (it is not part of the Docker image), one EvalHarness server per process, and `compare_runs` uses the default regression tolerances rather than the server's configured ones.
 - **API service scope**: one shared API key (no per-user accounts or rate limits per caller), an in-memory queue, and a file-based history intended for a single instance. Runs interrupted by a restart are marked failed, not resumed. Datasets are server-side files; there is no upload endpoint.
 - **Single provider shipped**: OpenAI and OpenAI-compatible endpoints (set `BaseUrl`). Others need an `ILlmClient`/`IEmbeddingClient`.
 - **Judge variance**: LLM judges are noisy even at temperature 0, and a judge model change shifts scores. Use `Repeats` to average the noise down, rely on the one-test tolerance, and pin the judge model. Reports record the judge model and prompt fingerprint, so a change is flagged in regression warnings, but re-baseline when you change them. The judge itself is not yet calibrated against human-labelled answers.

@@ -16,6 +16,7 @@ COPY src/EvalHarness.Runner/EvalHarness.Runner.csproj src/EvalHarness.Runner/
 COPY src/EvalHarness.Reporting/EvalHarness.Reporting.csproj src/EvalHarness.Reporting/
 COPY src/EvalHarness.Hosting/EvalHarness.Hosting.csproj src/EvalHarness.Hosting/
 COPY src/EvalHarness.Cli/EvalHarness.Cli.csproj src/EvalHarness.Cli/
+COPY src/EvalHarness.Mcp/EvalHarness.Mcp.csproj src/EvalHarness.Mcp/
 COPY src/EvalHarness.Api/EvalHarness.Api.csproj src/EvalHarness.Api/
 COPY tests/EvalHarness.Tests/EvalHarness.Tests.csproj tests/EvalHarness.Tests/
 RUN dotnet restore EvalHarness.sln
