@@ -1,0 +1,180 @@
+{
+  "name": "acme-multihop",
+  "description": "Questions that need two or more facts from different parts of samples/acme-travel-policy.pdf and samples/acme-engineering-runbook.md. Ingest both files first. Used to decide whether classic RAG is enough or whether agentic retrieval is needed.",
+  "testCases": [
+    {
+      "id": "mh-tokyo-trip",
+      "category": "multi-step",
+      "difficulty": "hard",
+      "question": "I am flying to Tokyo for a 5-night client trip on a 9-hour flight. What is the most I can claim for the hotel in total, and what class can I fly without extra approval?",
+      "expectedAnswer": "Tokyo is a Tier 1 city, so up to $220 per night, which is $1,100 for 5 nights. For a flight of six hours or longer, premium economy is permitted without extra approval; business class needs a vice president's advance approval.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "$220 per night in Tier 1 cities"
+        },
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "premium economy is permitted"
+        }
+      ]
+    },
+    {
+      "id": "mh-austin-trip",
+      "category": "multi-step",
+      "difficulty": "hard",
+      "question": "I take a 2-night trip to Austin and drive my own car 100 miles in total. What is the most I can claim for the hotel and the mileage together?",
+      "expectedAnswer": "Austin is not a Tier 1 city, so the hotel limit is $150 per night, $300 for 2 nights. Mileage at $0.67 per mile is $67. The total is $367.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "$150 per night everywhere else"
+        },
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "$0.67 per mile"
+        }
+      ]
+    },
+    {
+      "id": "mh-stolen-laptop-hotel",
+      "category": "multi-step",
+      "difficulty": "hard",
+      "question": "My company laptop was stolen from my hotel room during a trip. Which policy rule did I break, and what must I do now?",
+      "expectedAnswer": "Company devices must never be left unattended in hotel rooms. The theft must be reported to the security desk within 4 hours of discovery, after which the device is locked and wiped after 24 hours if not recovered. A police report should also be filed and its number sent to the security team.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "hotel rooms"
+        },
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "within 4 hours of the moment the loss is discovered"
+        },
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "file a police report"
+        }
+      ]
+    },
+    {
+      "id": "mh-late-expenses",
+      "category": "multi-step",
+      "difficulty": "medium",
+      "question": "My trip ended on March 1. By what date should I submit my expense report, and what happens if I wait more than 60 days?",
+      "expectedAnswer": "Within 30 days of the end of the trip, so by March 31. Reports submitted after 60 days are returned unpaid and can only be reopened with the finance director's approval.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "within 30 days of the end of the trip"
+        },
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "Reports submitted after 60 days"
+        }
+      ]
+    },
+    {
+      "id": "mh-direct-booking",
+      "category": "multi-step",
+      "difficulty": "medium",
+      "question": "I want to book a 5-hour flight directly with the airline to save time. What does the policy say about who to book with and which class to choose?",
+      "expectedAnswer": "Flights must be booked through the approved travel agency, and economy class is required for flights shorter than six hours.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "approved travel agency"
+        },
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "Economy class is required for flights shorter than six hours"
+        }
+      ]
+    },
+    {
+      "id": "mh-client-dinner",
+      "category": "multi-step",
+      "difficulty": "hard",
+      "question": "On the second day of a trip I host a client dinner. How are my meals reimbursed that day, and how does that differ from the first day?",
+      "expectedAnswer": "On the second day the actual cost of the client dinner may be claimed instead of the per diem, provided the attendees are listed on the expense report. On the first day the $75 per diem is reduced to 75 percent.",
+      "expectedSources": [
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "actual cost may be claimed instead of the per diem"
+        },
+        {
+          "documentName": "acme-travel-policy.pdf",
+          "chunkContains": "reduced to 75 percent"
+        }
+      ]
+    },
+    {
+      "id": "mh-sev1-friday",
+      "category": "multi-step",
+      "difficulty": "hard",
+      "question": "A SEV1 incident starts on a Friday. How fast must we respond, who gets paged, and when is the review due?",
+      "expectedAnswer": "First response within 5 minutes with updates every 15 minutes; the on-call engineer, engineering manager and VP Engineering are paged; a written post-incident review is due within 5 business days.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "SEV1 | Full outage"
+        },
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "within 5 business days"
+        }
+      ]
+    },
+    {
+      "id": "mh-search-service",
+      "category": "multi-step",
+      "difficulty": "medium",
+      "question": "Which team owns the search service, what datastore does it use, and what availability target does it have?",
+      "expectedAnswer": "The Discovery team owns search, it uses OpenSearch, and as a tier 2 service its monthly availability target is 99.9 percent.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "search | Discovery"
+        },
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "tier 2 services 99.9 percent"
+        }
+      ]
+    },
+    {
+      "id": "mh-rollback-migration-steps",
+      "category": "multi-step",
+      "difficulty": "hard",
+      "question": "I need to roll back a release that included a database migration. What must I do first, and what command do I run after that?",
+      "expectedAnswer": "First ask the database on-call, because the previous version may not be able to read the migrated schema. Then run deploy rollback --service $SERVICE --env production --to previous.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "Never roll back a release that included a database migration"
+        },
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "deploy rollback --service"
+        }
+      ]
+    },
+    {
+      "id": "mh-long-lock-migration",
+      "category": "multi-step",
+      "difficulty": "medium",
+      "question": "A migration will lock a table for 45 seconds. Can it ship in Tuesday's release?",
+      "expectedAnswer": "No. A migration expected to lock a table for more than 30 seconds must be scheduled with the database on-call and run outside the Tuesday and Thursday release windows.",
+      "expectedSources": [
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "lock a table for more than 30 seconds"
+        },
+        {
+          "documentName": "acme-engineering-runbook.md",
+          "chunkContains": "outside the Tuesday and Thursday release windows"
+        }
+      ]
+    }
+  ]
+}

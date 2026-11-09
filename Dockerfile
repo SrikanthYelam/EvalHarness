@@ -6,7 +6,7 @@
 #   test             runs the test suite                 docker build --target test .
 
 # ---- restore: only project files, so the NuGet layer is cached until a dependency changes ----
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS restore
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
 WORKDIR /src
 COPY global.json Directory.Build.props EvalHarness.sln ./
 COPY src/EvalHarness.Core/EvalHarness.Core.csproj src/EvalHarness.Core/
@@ -38,7 +38,7 @@ FROM build AS publish-api
 RUN dotnet publish src/EvalHarness.Api -c Release --no-build -o /app
 
 # ---- cli: one-shot batch run; exits with the quality-gate exit code ----
-FROM mcr.microsoft.com/dotnet/runtime:8.0 AS cli
+FROM mcr.microsoft.com/dotnet/runtime:10.0 AS cli
 WORKDIR /app
 COPY --from=publish-cli /app .
 # Datasets are mounted read-only at /datasets and reports written to /reports (a bind mount), so nothing is lost
@@ -50,7 +50,7 @@ ENTRYPOINT ["dotnet", "EvalHarness.Cli.dll"]
 CMD ["run", "--dataset", "/datasets/acme-handbook.json", "--output", "/reports"]
 
 # ---- api (last stage, so it is the default target): long-running service ----
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS api
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS api
 WORKDIR /app
 COPY --from=publish-api /app .
 # Datasets are mounted read-only at /datasets; run history and reports live in /data (mount a volume to keep them).

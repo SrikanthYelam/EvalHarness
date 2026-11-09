@@ -54,7 +54,7 @@ Any single number hides at least one of these. EvalHarness reports them side by 
 
 ## Quick start
 
-Prerequisites: .NET 8 SDK for local runs, and/or Docker. The judge and embedding evaluators need an OpenAI-compatible API key in `OPENAI_API_KEY`.
+Prerequisites: .NET 10 SDK for local runs, and/or Docker. The judge and embedding evaluators need an OpenAI-compatible API key in `OPENAI_API_KEY`.
 
 ```bash
 # 1. Check the dataset (no API calls)
